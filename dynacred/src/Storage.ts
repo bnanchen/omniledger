@@ -2,17 +2,17 @@ import { Buffer } from "buffer";
 import Dexie from "dexie";
 
 export interface IStorage {
-    set(key: string, buffer: string);
+    set(key: string, buffer: string): void;
 
     get(key: string): Promise<string>;
 
-    putObject(key: string, obj: any);
+    putObject(key: string, obj: any): void;
 
     getObject(entry: string): Promise<any>;
 }
 
 export class StorageDB {
-    static db: Dexie = null;
+    static db: Dexie | undefined;
 
     static async set(key: string, buffer: string) {
         return this.getDB().put({key, buffer});

@@ -126,7 +126,7 @@ export class Contact {
     }
 
     get seedPublic(): Public {
-        return Public.fromBuffer(this.credential.getAttribute("1-public", "seedPub"));
+        return Public.fromBuffer(this.getCredentialAttribute("1-public", "seedPub"));
     }
 
     set seedPublic(pub: Public) {
@@ -137,7 +137,7 @@ export class Contact {
     }
 
     get personhoodPub(): Public {
-        return Public.fromBuffer(this.credential.getAttribute("1-public", "personhood"));
+        return Public.fromBuffer(this.getCredentialAttribute("1-public", "personhood"));
     }
 
     set personhoodPub(pub: Public) {
@@ -148,7 +148,7 @@ export class Contact {
     }
 
     get coinID(): InstanceID {
-        return this.credential.getAttribute("1-public", "coin");
+        return this.getCredentialAttribute("1-public", "coin");
     }
 
     set coinID(id: InstanceID) {
@@ -159,7 +159,7 @@ export class Contact {
     }
 
     get ltsID(): InstanceID {
-        return this.credential.getAttribute("1-config", "ltsID");
+        return this.getCredentialAttribute("1-config", "ltsID");
     }
 
     set ltsID(id: InstanceID) {
@@ -170,8 +170,8 @@ export class Contact {
     }
 
     get ltsX(): Point {
-        const lx = this.credential.getAttribute("1-config", "ltsX");
-        return lx ? PointFactory.fromProto(lx) : null;
+        const lx = this.getCredentialAttribute("1-config", "ltsX");
+        return PointFactory.fromProto(lx);
     }
 
     set ltsX(X: Point) {
@@ -182,7 +182,7 @@ export class Contact {
     }
 
     get spawnerID(): InstanceID {
-        return this.credential.getAttribute("1-config", "spawner");
+        return this.getCredentialAttribute("1-config", "spawner");
     }
 
     set spawnerID(id: InstanceID) {
@@ -207,7 +207,7 @@ export class Contact {
 
     get subscribe(): boolean {
         const sub = this.credential.getAttribute("1-public", "subscribe");
-        return sub && sub.equals(Buffer.from("true"));
+        return sub !== undefined && sub.equals(Buffer.from("true"));
     }
 
     set subscribe(c: boolean) {
@@ -239,8 +239,8 @@ export class Contact {
         return darc;
     }
 
-    static prepareInitialCred(alias: string, pub: Public, spawner: InstanceID, deviceDarcID: InstanceID,
-                              lts: LongTermSecret): CredentialStruct {
+    static prepareInitialCred(alias: string, pub: Public, spawner?: InstanceID, deviceDarcID?: InstanceID,
+                              lts?: LongTermSecret): CredentialStruct {
         const cred = new CredentialStruct();
         cred.setAttribute("1-public", "alias", Buffer.from(alias));
         cred.setAttribute("1-public", "coin", CoinInstance.coinIID(pub.toBuffer()));
@@ -271,21 +271,28 @@ export class Contact {
 
     static async fromQR(bc: ByzCoinRPC, str: string): Promise<Contact> {
         const qrURL = new URL(str);
-        const params = qrURL.searchParams;
+        const getFromParams = (key: string) => {
+            const value = qrURL.searchParams.get(key);
+            if (value === null) {
+                throw Error("missing parameters from query");
+            }
+            return value;
+        };
+
         const u = new Contact();
         switch (qrURL.origin + qrURL.pathname) {
             case Contact.urlRegistered:
+                const credIID = Buffer.from(getFromParams("credentialIID"), "hex");
                 u.bc = bc;
-                u.credentialInstance = await CredentialsInstance.fromByzcoin(bc,
-                    Buffer.from(params.get("credentialIID"), "hex"));
+                u.credentialInstance = await CredentialsInstance.fromByzcoin(bc, credIID);
                 u.credential = u.credentialInstance.credential.copy();
                 u.darcInstance = await DarcInstance.fromByzcoin(bc, u.credentialInstance.darcID);
                 return await u.updateOrConnect();
             case Contact.urlUnregistered:
-                u.alias = params.get("alias");
-                u.email = params.get("email");
-                u.phone = params.get("phone");
-                u.seedPublic = Public.fromHex(params.get("public_ed25519"));
+                u.alias = getFromParams("alias");
+                u.email = getFromParams("email");
+                u.phone = getFromParams("phone");
+                u.seedPublic = Public.fromHex(getFromParams("public_ed25519"));
                 return u;
             default:
                 return Promise.reject("invalid URL");
@@ -337,20 +344,20 @@ export class Contact {
             return Log.rcatch(e, "couldn't convert to Contact from UserLocation");
         }
     }
-    credentialInstance: CredentialsInstance = null;
-    darcInstance: DarcInstance = null;
-    coinInstance: CoinInstance = null;
-    spawnerInstance: SpawnerInstance = null;
-    recover: Recover = null;
-    calypso: Calypso = null;
-    bc: ByzCoinRPC = null;
-    contactsCache: Contact[] = null;
-    actionsCache: DarcInstance[] = null;
-    groupsCache: DarcInstance[] = null;
+    credential: CredentialStruct;
+    credentialInstance: CredentialsInstance;
+    darcInstance: DarcInstance;
+    coinInstance: CoinInstance;
+    spawnerInstance: SpawnerInstance;
+    recover: Recover;
+    calypso: Calypso;
+    bc: ByzCoinRPC;
+    contactsCache: Contact[] = [];
+    actionsCache: DarcInstance[] | undefined = undefined;
+    groupsCache: DarcInstance[] = [];
 
-    constructor(public credential: CredentialStruct = null,
-                public data: Data = null) {
-        if (credential == null) {
+    constructor(credential?: CredentialStruct, public data?: Data) {
+        if (this.credential === undefined) {
             this.credential = new CredentialStruct();
             Contact.setVersion(this.credential, 0);
         }
@@ -363,7 +370,7 @@ export class Contact {
     }
 
     async getActions(): Promise<DarcInstance[]> {
-        if (this.actionsCache) {
+        if (this.actionsCache !== undefined) {
             return this.actionsCache;
         }
         this.actionsCache = [];
@@ -439,8 +446,8 @@ export class Contact {
         };
     }
 
-    async updateOrConnect(bc: ByzCoinRPC = null, getContacts: boolean = true): Promise<Contact> {
-        if (bc) {
+    async updateOrConnect(bc?: ByzCoinRPC, getContacts: boolean = true): Promise<Contact> {
+        if (bc !== undefined) {
             this.bc = bc;
             Log.lvl1("Connecting user", this.alias,
                 "with public key", this.seedPublic.toHex(), "and id", this.credentialIID.toString("hex"),
@@ -530,8 +537,7 @@ export class Contact {
 
     getCoinAddress(): InstanceID {
         if (!this.credential || !this.credential.credentials) {
-            Log.error("don't have the credentials");
-            return;
+            throw Error("don't have the credentials");
         }
         if (this.coinID != null && this.coinID.length === 32) {
             return this.coinID;
@@ -547,14 +553,14 @@ export class Contact {
     }
 
     // this method sends the current state of the Credentials to ByzCoin.
-    async sendUpdate(signers: Signer[] = null) {
+    async sendUpdate(signers?: Signer[]) {
         if (this.credentialInstance != null) {
             if (this.coinInstance && !this.coinID) {
                 this.coinID = this.coinInstance.id;
                 this.version = this.version + 1;
             }
             if (this.version > Contact.getVersion(this.credentialInstance.credential)) {
-                if (!signers) {
+                if (signers === undefined) {
                     signers = [this.data.keyIdentitySigner];
                 }
                 await this.credentialInstance.sendUpdate(signers, this.credential);
@@ -586,6 +592,14 @@ export class Contact {
             location: "somewhere",
             publicKey: this.seedPublic.point.toProto(),
         });
+    }
+
+    private getCredentialAttribute(name: string, key: string): Buffer {
+        const ret = this.credential.getAttribute(name, key);
+        if (ret === undefined) {
+            throw Error(`getCredentialAttribute: unable to find "${name}"/"${key}"`);
+        }
+        return ret;
     }
 }
 

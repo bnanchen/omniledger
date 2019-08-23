@@ -85,7 +85,10 @@ export class SecureData {
         const nonce = calypsoWrite.write.data.slice(0, 24);
         const symKey = Buffer.concat([symKeyPart, calypsoWrite.write.data.slice(24, 28)]);
         const data = secretbox_open(calypsoWrite.write.data.slice(28), nonce, symKey);
-        return new SecureData(calypsoWrite.id, symKey, Buffer.from(data));
+        if (data === undefined) {
+            throw Error("secretbox_open: failed auth");
+        }
+        return new SecureData(calypsoWrite.id, symKey, new Buffer(data));
     }
 
     /**
@@ -142,7 +145,7 @@ export class FileBlob {
         const fbObj: any = JSON.parse(b.toString());
         return new FileBlob(fbObj.name, Buffer.from(fbObj.data), fbObj.attributes);
     }
-    constructor(public name: string, public data: Buffer, public attributes: IFBAttribute[] = null) {
+    constructor(public name: string, public data: Buffer, public attributes: IFBAttribute[] = []) {
     }
 
     toBuffer(): Buffer {

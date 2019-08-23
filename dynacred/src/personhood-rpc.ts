@@ -32,7 +32,7 @@ export class PersonhoodRPC {
 
     /**
      */
-    async listParties(newParty: Party = null): Promise<Party[]> {
+    async listParties(newParty?: Party): Promise<Party[]> {
         const partyList = new PartyList({newparty: newParty});
         let parties: Party[] = [];
         await Promise.all(this.list.map(async (addr) => {
@@ -82,10 +82,10 @@ export class PersonhoodRPC {
         return this.meetups(new Meetup({wipe: true}));
     }
 
-    async listRPS(newRoPaSci: RoPaSci = null): Promise<RoPaSci[]> {
+    async listRPS(newRoPaSci?: RoPaSci): Promise<RoPaSci[]> {
         const ropascis: RoPaSci[] = [];
         let rpsList = new RoPaSciList();
-        if (newRoPaSci) {
+        if (newRoPaSci !== undefined) {
             rpsList = new RoPaSciList({newRoPaSci});
         }
         await Promise.all(this.list.map(async (addr) => {
@@ -536,7 +536,7 @@ export class MeetupResponse extends Message<MeetupResponse> {
     static register() {
         registerMessage("MeetupResponse", MeetupResponse);
     }
-    readonly users: UserLocation[];
+    readonly users: UserLocation[] = [];
 
     constructor(props?: Properties<MeetupResponse>) {
         super(props);

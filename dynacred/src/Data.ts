@@ -167,13 +167,7 @@ export class Data {
             costParty: Long.fromNumber(1000),
             costRoPaSci: Long.fromNumber(10),
         };
-        const spawner = await SpawnerInstance.spawn({
-            bc,
-            beneficiary: null,
-            costs,
-            darcID: adminDarcID,
-            signers: [adminSigner],
-        });
+        const spawner = await SpawnerInstance.spawn(bc, adminDarcID, [adminSigner], costs);
 
         const lts = await LongTermSecret.spawn(bc, adminDarcID, [adminSigner]);
 
@@ -264,12 +258,13 @@ export class Data {
         // Follow the links from the credential darc-instance to the signer-darc to the device-darc
         const signerDarcID = d.contact.darcInstance.getSignerDarcIDs()[0];
         const signerDarc = await DarcInstance.fromByzcoin(d.bc, signerDarcID);
-        let deviceDarc: DarcInstance;
+        let deviceDarc: DarcInstance | null = null;
         const ephemeralSigner = SignerEd25519.fromBytes(ephemeral);
         for (const ddID of signerDarc.getSignerDarcIDs()) {
             const dd = await DarcInstance.fromByzcoin(d.bc, ddID);
+            const getDarc = async (id: InstanceID) => (await DarcInstance.fromByzcoin(d.bc, id)).darc;
             try {
-                const ids = await dd.darc.ruleMatch(Darc.ruleSign, [ephemeralSigner], () => null);
+                const ids = await dd.darc.ruleMatch(Darc.ruleSign, [ephemeralSigner], getDarc);
                 if (ids.length > 0) {
                     deviceDarc = dd;
                     break;
@@ -278,7 +273,7 @@ export class Data {
                 Log.lvl2("This darc doesn't match", e);
             }
         }
-        if (!deviceDarc) {
+        if (deviceDarc === null) {
             throw new Error("didn't find this ephemeral key in device darcs");
         }
         const newDeviceDarc = deviceDarc.darc.evolve();
@@ -292,7 +287,7 @@ export class Data {
     personhoodPublished: boolean;
     keyPersonhood: KeyPair;
     keyIdentity: KeyPair;
-    lts: LongTermSecret = null;
+    lts: LongTermSecret;
     contact: Contact;
     parties: PartyItem[] = [];
     badges: Badge[] = [];
@@ -348,8 +343,7 @@ export class Data {
             this.contact = Contact.fromObject(obj.contact);
             this.contact.data = this;
         } else {
-            const cred = Contact.prepareInitialCred("new identity", this.keyIdentity._public,
-                null, null, null);
+            const cred = Contact.prepareInitialCred("new identity", this.keyIdentity._public);
             this.contact = new Contact(cred, this);
         }
     }
@@ -452,7 +446,7 @@ export class Data {
             d.contact = contact;
             d.contact.credential =
                 Contact.prepareInitialCred(contact.alias, contact.seedPublic, this.spawnerInstance.id,
-                    null, this.lts);
+                    undefined, this.lts);
             d.spawnerInstance = this.spawnerInstance;
             progress("Writing credential to chain", 50);
             await d.registerSelf(this.coinInstance, [this.keyIdentitySigner]);
@@ -467,10 +461,10 @@ export class Data {
     async createUserCredentials(pub: Public = this.keyIdentity._public,
                                 darcID: Buffer = this.darcInstance.id,
                                 coinIID: Buffer = this.coinInstance.id,
-                                referral: Buffer = null,
-                                orig: Contact = null): Promise<CredentialInstance> {
-        let cred: CredentialStruct = null;
-        if (orig == null) {
+                                referral?: Buffer,
+                                orig?: Contact): Promise<CredentialInstance> {
+        let cred: CredentialStruct;
+        if (orig === undefined) {
             Log.lvl1("Creating user credential");
             const credPub = Credential.fromNameAttr("public", "ed25519", pub.toBuffer());
             const credDarc = Credential.fromNameAttr("darc", "darcID", darcID);
@@ -532,10 +526,11 @@ export class Data {
         if (requestURL.origin + requestURL.pathname !== Data.urlRecoveryRequest) {
             throw new Error("not a recovery request");
         }
-        if (!requestURL.searchParams.has("public")) {
+        const publicKeyHex = requestURL.searchParams.get("public");
+        if (publicKeyHex === null) {
             throw new Error("recovery request is missing public argument");
         }
-        const publicKey = Buffer.from(requestURL.searchParams.get("public"), "hex");
+        const publicKey = Buffer.from(publicKeyHex, "hex");
         if (publicKey.length !== RecoverySignature.pub) {
             throw new Error("got wrong public key length");
         }
@@ -571,12 +566,13 @@ export class Data {
             throw new Error("not a recovery signature");
         }
         const sigParams = sigURL.searchParams;
-        if (!sigParams.has("credentialIID") ||
-            !sigParams.has("pubSig")) {
+        const credIIDHex = sigParams.get("credentialIID");
+        const pubSigHex = sigParams.get("pubSig");
+        if (credIIDHex === null || pubSigHex === null) {
             throw new Error("credentialIID or signature missing");
         }
-        const credIID = Buffer.from(sigParams.get("credentialIID"), "hex");
-        const pubSig = Buffer.from(sigParams.get("pubSig"), "hex");
+        const credIID = Buffer.from(credIIDHex, "hex");
+        const pubSig = Buffer.from(pubSigHex, "hex");
         if (pubSig.length !== RecoverySignature.pubSig) {
             throw new Error("signature should be of length 64");
         }
@@ -647,7 +643,11 @@ export class Data {
 
     async fetchOrgKeys(ppi: PopPartyInstance): Promise<Point[]> {
         const piDarc = await DarcInstance.fromByzcoin(this.bc, ppi.darcID);
-        const orgDarcs = piDarc.darc.rules.list.find((l) => l.action === "invoke:popParty.finalize").getIdentities();
+        const rule = piDarc.darc.rules.list.find((l: Rule) => l.action === "invoke:popParty.finalize");
+        if (rule === undefined) {
+            throw Error("malformed DARC of given PopPartyInstance");
+        }
+        const orgDarcs = rule.getIdentities();
         const orgPers: Point[] = [];
         const contacts = this.contacts.concat(this.contact);
 
@@ -779,7 +779,7 @@ export class Data {
             d.keyIdentity = new KeyPair(ephemeral.toHex());
         }
         d.contact.credential = Contact.prepareInitialCred(alias, d.keyIdentity._public, this.spawnerInstance.id,
-            null, this.lts);
+            undefined, this.lts);
         d.spawnerInstance = this.spawnerInstance;
         return d.registerSelf(this.coinInstance, [this.keyIdentitySigner]);
     }
