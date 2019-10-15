@@ -166,6 +166,7 @@ export class Data {
             costDarc: Long.fromNumber(100),
             costParty: Long.fromNumber(1000),
             costRoPaSci: Long.fromNumber(10),
+            costValue: Long.fromNumber(1000),
         };
         const spawner = await SpawnerInstance.spawn({
             bc,
