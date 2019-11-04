@@ -1,11 +1,8 @@
-// A sample Jasmine test
-require('nativescript-nodeify');
-
 import { curve } from "@dedis/kyber";
 import { schnorr } from "@dedis/kyber/sign";
 import { createHash } from "crypto-browserify";
-import { KeyPair } from "~/lib/dynacred/KeyPair";
-import Log from "~/lib/cothority/log";
+import { KeyPair } from "../app/lib/dynacred/KeyPair";
+import Log from "../app/lib/cothority/log";
 
 const ed25519 = curve.newCurve("edwards25519");
 
