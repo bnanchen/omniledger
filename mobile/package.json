@@ -66,8 +66,6 @@
   "devDependencies": {
     "@types/jasmine": "3.4.0",
     "jasmine": "^3.5.0",
-    "@types/mocha": "^5.2.7",
-    "chai": "4.2.0",
     "karma": "4.4.1",
     "karma-chai": "0.1.0",
     "karma-jasmine": "2.0.1",
