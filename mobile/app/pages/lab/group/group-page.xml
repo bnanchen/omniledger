@@ -1,0 +1,11 @@
+<Page xmlns="http://schemas.nativescript.org/tns.xsd"
+      loaded="navigatingTo"
+      class="page">
+    <ActionBar class="action-bar">
+        <Label class="action-bar-title" text="{{ L('group.title') }}"/>
+    </ActionBar>
+    <StackLayout verticalAlignment="center" >
+        <Button text="{{ L('group.button_scan_qr') }}" tap="readQr" />
+        <Button text="{{ L('group.button_create_qr') }}" tap="createQr" />
+    </StackLayout>
+</Page>
