@@ -1,7 +1,7 @@
 import { Group, Point, Scalar } from "@dedis/kyber";
 import { schnorr } from "@dedis/kyber/sign";
 import { Private, Public } from "../dynacred/KeyPair";
-import GroupDefinitionList from "./groupDefinitionList";
+import GroupDefinitionCollection from "./groupDefinitionCollection";
 
 // variables of a GroupDefinition
 export interface IGroupDefinition {
@@ -14,6 +14,8 @@ export interface IGroupDefinition {
     successor?: Scalar[];
     readonly predecessor?: Scalar;
     creationTime?: Date;
+    voteThresholdEvolution?: boolean;
+    purposeEvolution?: boolean;
 }
 
 export class GroupDefinition {
@@ -42,7 +44,6 @@ export class GroupDefinition {
             throw new Error("Property suite is missing from the JSON");
         }
 
-        // tslint:disable-next-line: max-line-length
         return new GroupDefinition(jsonObject as IGroupDefinition);
     }
 
@@ -56,6 +57,7 @@ export class GroupDefinition {
             const toBeHashed: Buffer[] = [
                 this.variables.orgPubKeys.join(),
                 this.variables.voteThreshold.toFixed(),
+                this.variables.purpose,
                 this.variables.predecessor.marshalBinary().toString(),
                 this.variables.creationTime.toISOString(),
             ].map((el) => new Buffer(el));
@@ -134,7 +136,7 @@ export class GroupDefinition {
         }
     }
 
-    // TODO useful?
+    // TODO useful? Do it recursively
     // getWorldView(...groupDefinitions: GroupDefinition[]): GroupDefinition[] {
     //     const groupDefinitionList = GroupDefinitionList.getInstance();
     //     for (const gd of groupDefinitions) {
