@@ -1,15 +1,17 @@
 import { Group, Point, Scalar } from "@dedis/kyber";
 import { schnorr } from "@dedis/kyber/sign";
+import { Private, Public } from "../dynacred/KeyPair";
+import GroupDefinitionList from "./groupDefinitionList";
 
 // variables of a GroupDefinition
-interface IGroupDefinition {
+export interface IGroupDefinition {
     contractID?: Scalar;
-    readonly orgPubKeys: Point[];
+    readonly orgPubKeys: Public[];
     readonly suite: Group;
     readonly voteThreshold: number;
     readonly purpose: string;
     readonly signatures?: string[];
-    successor?: Scalar;
+    successor?: Scalar[];
     readonly predecessor?: Scalar;
     creationTime?: Date;
 }
@@ -65,10 +67,10 @@ export class GroupDefinition {
         return JSON.stringify(this.variables as IGroupDefinition);
     }
 
-    addSignature(privateKey: Scalar) {
+    addSignature(privateKey: Private) {
         // create signature
         const message: Buffer = this.variables.contractID.marshalBinary();
-        const signature: string = schnorr.sign(this.variables.suite, privateKey, message).toString("hex");
+        const signature: string = schnorr.sign(this.variables.suite, privateKey.scalar, message).toString("hex");
         // append signature
         this.variables.signatures.push(signature);
         this.variables.creationTime = new Date();
@@ -91,7 +93,7 @@ export class GroupDefinition {
         const message = this.variables.contractID.marshalBinary();
         const verifiedSig: boolean[] = this.variables.signatures.map((sig: string) => {
             for (const pubKey of this.variables.orgPubKeys) {
-                if (schnorr.verify(this.variables.suite, pubKey, message, new Buffer(sig))) {
+                if (schnorr.verify(this.variables.suite, pubKey.point, message, new Buffer(sig))) {
                     return true;
                 }
                 return false;
@@ -102,6 +104,7 @@ export class GroupDefinition {
         }
 
         // verify vote threshold
+        // tslint:disable-next-line: max-line-length
         if (!((this.variables.signatures.length / this.variables.orgPubKeys.length) * 100 >= this.variables.voteThreshold)) {
             return false;
         }
@@ -110,29 +113,39 @@ export class GroupDefinition {
     }
 
     validate(): boolean {
+        // tslint:disable-next-line: max-line-length
         return (this.variables.signatures.length / this.variables.orgPubKeys.length) * 100 >= this.variables.voteThreshold;
     }
 
     proposeNewGroupDefinition(proposition: IGroupDefinition): GroupDefinition {
         const propGroupDefinition = new GroupDefinition(proposition);
-        this.variables.successor = propGroupDefinition.variables.contractID;
+        this.variables.successor.push(propGroupDefinition.variables.contractID);
         this.variables.creationTime = new Date();
         return propGroupDefinition;
     }
 
     mergeSignatures(groupDefinition: GroupDefinition) {
         if (this.variables.contractID === groupDefinition.variables.contractID) {
-            const newSignatures: string[] = groupDefinition.variables.signatures.filter((sig: string, idx: number) => this.variables.signatures.indexOf(sig) !== idx);
+            const newSignatures: string[] = groupDefinition.variables.signatures.filter((sig: string, idx: number) => {
+                return this.variables.signatures.indexOf(sig) !== idx;
+            });
             newSignatures.forEach((sig: string) => this.variables.signatures.push(sig));
             this.variables.creationTime = new Date();
         }
     }
 
-    getWorldView(...GroupDefinitions): GroupDefinition[] {
-        return null;
-    }
+    // TODO useful?
+    // getWorldView(...groupDefinitions: GroupDefinition[]): GroupDefinition[] {
+    //     const groupDefinitionList = GroupDefinitionList.getInstance();
+    //     for (const gd of groupDefinitions) {
+    //         while (true) {
+    //             groupDefinitionList.
+    //         }
+    //     }
+    //     return null;
+    // }
 
-    getOrganizers(): Point[] {
+    getOrganizers(): Public[] {
         return this.variables.orgPubKeys;
     }
 }
