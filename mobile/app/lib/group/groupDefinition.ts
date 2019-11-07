@@ -137,15 +137,14 @@ export class GroupDefinition {
     }
 
     // TODO useful? Do it recursively
-    // getWorldView(...groupDefinitions: GroupDefinition[]): GroupDefinition[] {
-    //     const groupDefinitionList = GroupDefinitionList.getInstance();
-    //     for (const gd of groupDefinitions) {
-    //         while (true) {
-    //             groupDefinitionList.
-    //         }
-    //     }
-    //     return null;
-    // }
+    // TODO to be tested
+    getWorldView(groupDefinition: GroupDefinition) {
+        const groupDefinitionCollection = GroupDefinitionCollection.getInstance();
+        const children = groupDefinitionCollection.getChildren(groupDefinition);
+        return children.map((c: GroupDefinition) => {
+            return this.getWorldView(c).unshift(groupDefinition);
+        });
+    }
 
     getOrganizers(): Public[] {
         return this.variables.orgPubKeys;
