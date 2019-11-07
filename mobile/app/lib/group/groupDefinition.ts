@@ -125,6 +125,7 @@ export class GroupDefinition {
         const propGroupDefinition = new GroupDefinition(proposition);
         this.variables.successor.push(propGroupDefinition.variables.contractID);
         this.variables.creationTime = new Date();
+        this.variables.lastTimeModified = this.variables.creationTime;
         return propGroupDefinition;
     }
 
@@ -134,7 +135,7 @@ export class GroupDefinition {
                 return this.variables.signatures.indexOf(sig) !== idx;
             });
             newSignatures.forEach((sig: string) => this.variables.signatures.push(sig));
-            this.variables.creationTime = new Date();
+            this.variables.lastTimeModified = new Date();
         }
     }
 
