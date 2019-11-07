@@ -28,21 +28,21 @@
             // check if the contractID is not already there
             const existing: GroupDefinition[] = [];
             this.collection.forEach((gd: GroupDefinition) => {
-                if (gd.variables.contractID === groupDefinition.variables.contractID) {
+                if (gd.contractID === groupDefinition.contractID) {
                     existing.push(gd);
                 }
             });
 
             if (!existing.length) {
                 groupDefinition.mergeSignatures(existing[0]);
-                this.collection.set(groupDefinition.variables.contractID, groupDefinition);
+                this.collection.set(groupDefinition.contractID, groupDefinition);
             } else {
-                this.collection.set(groupDefinition.variables.contractID, groupDefinition);
+                this.collection.set(groupDefinition.contractID, groupDefinition);
             }
         }
 
-        has(contractID: Scalar): boolean {
-            return this.collection.has(contractID);
+        has(groupDefinition: GroupDefinition): boolean {
+            return this.collection.has(groupDefinition.contractID);
         }
 
         get(contractID: Scalar): GroupDefinition {
@@ -53,11 +53,11 @@
             // TODO should I take into consideration the public key of the organizer calling this method to get the current groupDefinition?
             const lastGroupDefinition: GroupDefinition[] = [];
             this.collection.forEach((gd: GroupDefinition) => {
-                if (!gd.variables.successor.length) {
+                if (!gd.successor.length) {
                     let lastGD = gd;
                     while (!lastGD.validate()) {
                         // normally should have only one predecessor
-                        lastGD = this.collection.get(lastGD.variables.predecessor[0]);
+                        lastGD = this.collection.get(lastGD.predecessor[0]);
                     }
                     lastGroupDefinition.push(lastGD);
                 }
@@ -67,6 +67,6 @@
         }
 
         getChildren(groupDefinition: GroupDefinition): GroupDefinition[] {
-            return groupDefinition.variables.successor.map((id: Scalar) => this.collection.get(id));
+            return groupDefinition.successor.map((id: Scalar) => this.collection.get(id));
         }
     }

@@ -12,8 +12,9 @@ export interface IGroupDefinition {
     readonly purpose: string;
     readonly signatures?: string[];
     successor?: Scalar[];
-    readonly predecessor?: Scalar;
+    readonly predecessor?: Scalar[];
     creationTime?: Date;
+    lastTimeModified?: Date;
     voteThresholdEvolution?: boolean;
     purposeEvolution?: boolean;
 }
@@ -47,18 +48,19 @@ export class GroupDefinition {
         return new GroupDefinition(jsonObject as IGroupDefinition);
     }
 
-    readonly variables: IGroupDefinition;
+    private variables: IGroupDefinition;
 
     constructor(variables: IGroupDefinition) {
         this.variables = variables;
 
         this.variables.creationTime = typeof variables.creationTime === "undefined" ? new Date() : variables.creationTime;
+        this.variables.lastTimeModified = typeof variables.lastTimeModified === "undefined" ? new Date() : variables.lastTimeModified;
         if (!this.variables.contractID) {
             const toBeHashed: Buffer[] = [
                 this.variables.orgPubKeys.join(),
                 this.variables.voteThreshold.toFixed(),
                 this.variables.purpose,
-                this.variables.predecessor.marshalBinary().toString(),
+                this.variables.predecessor.map((p) => p.marshalBinary().toString()).join(),
                 this.variables.creationTime.toISOString(),
             ].map((el) => new Buffer(el));
             this.variables.contractID = schnorr.hashSchnorr(this.variables.suite, ...toBeHashed);
@@ -75,7 +77,7 @@ export class GroupDefinition {
         const signature: string = schnorr.sign(this.variables.suite, privateKey.scalar, message).toString("hex");
         // append signature
         this.variables.signatures.push(signature);
-        this.variables.creationTime = new Date();
+        this.variables.lastTimeModified = new Date();
     }
 
     verify(): boolean {
@@ -148,5 +150,49 @@ export class GroupDefinition {
 
     getOrganizers(): Public[] {
         return this.variables.orgPubKeys;
+    }
+
+    get contractID(): Scalar {
+        return this.variables.contractID;
+    }
+
+    get suite(): Group {
+        return this.variables.suite;
+    }
+
+    get voteThreshold(): number {
+        return this.variables.voteThreshold;
+    }
+
+    get purpose(): string {
+        return this.variables.purpose;
+    }
+
+    get signatures(): string[] {
+        return this.variables.signatures;
+    }
+
+    get predecessor(): Scalar[] {
+        return this.variables.predecessor;
+    }
+
+    get successor(): Scalar[] {
+        return this.variables.successor;
+    }
+
+    get creationTime(): Date {
+        return this.variables.creationTime;
+    }
+
+    get lastTimeModified(): Date {
+        return this.variables.lastTimeModified;
+    }
+
+    get voteThresholdEvolution(): boolean {
+        return this.variables.voteThresholdEvolution;
+    }
+
+    get purposeEvolution(): boolean {
+        return this.variables.purposeEvolution;
     }
 }

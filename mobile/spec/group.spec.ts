@@ -20,7 +20,7 @@ describe("Group Management", () => {
         };
         const originalGD = new GroupDefinition(originalVar);
 
-        // user1 exchange the first group definition
+        // user1 exchanges the first group definition
         originalGD.addSignature(user1._private);
 
         // user2 receives the group definition by JSON
