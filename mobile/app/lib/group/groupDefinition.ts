@@ -85,7 +85,7 @@ export class GroupDefinition {
         const toBeHashed: Buffer[] = [
             this.variables.orgPubKeys.join(),
             this.variables.voteThreshold.toFixed(),
-            this.variables.predecessor.marshalBinary.toString(),
+            this.variables.predecessor.map((p) => p.marshalBinary.toString()).join(),
             this.variables.creationTime.toISOString(),
         ].map((el) => new Buffer(el));
         const contractIDToCheck = schnorr.hashSchnorr(this.variables.suite, ...toBeHashed);
