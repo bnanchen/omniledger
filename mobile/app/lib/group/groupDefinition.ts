@@ -149,12 +149,16 @@ export class GroupDefinition {
         });
     }
 
-    getOrganizers(): Public[] {
+    get contractID(): Scalar {
+        return this.variables.contractID;
+    }
+
+    get organizers(): Public[] {
         return this.variables.orgPubKeys;
     }
 
-    get contractID(): Scalar {
-        return this.variables.contractID;
+    get numbOrganizers(): number {
+        return this.variables.orgPubKeys.length;
     }
 
     get suite(): Group {
