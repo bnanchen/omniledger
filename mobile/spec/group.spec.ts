@@ -7,7 +7,7 @@ import groupDefinitionList from "../app/lib/groupDefinitionCollection";
 const ed25519 = curve.newCurve("edwards25519");
 
 describe("Group Management", () => {
-    it("Test GroupDefinition", () => {
+    it("Test base behaviour", () => {
         const user1 = new KeyPair();
         const user2 = new KeyPair();
 
@@ -33,11 +33,11 @@ describe("Group Management", () => {
         expect(user2OriginalGD.validate()).toBeTruthy();
         expect(user2OriginalGD.verify()).toBeTruthy();
 
-        Log.print("Test passed!");
+        Log.print("Test basic behaviour passed!");
     });
     it("Test GroupDefinitionList", () => {
         const gdl = groupDefinitionList.getInstance();
 
-        Log.print("Test passed!");
+        Log.print("Test GroupDefinitionList passed!");
     });
 });
