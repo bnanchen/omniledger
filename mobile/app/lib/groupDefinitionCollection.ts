@@ -1,5 +1,5 @@
 import { Scalar, curve } from "@dedis/kyber";
-import { GroupDefinition } from "./groupDefinition";
+import { GroupDefinition } from "./group/groupDefinition";
 
 // Singleton class
 export default class GroupDefinitionCollection {

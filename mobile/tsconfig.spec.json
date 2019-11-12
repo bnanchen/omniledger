@@ -1,7 +1,7 @@
 {
   "extends": "./tsconfig.json",
   "include": [
-    "app/lib/groups/*.ts",
+    "app/lib/group/*.ts",
     "app/lib/dynacred/*.ts",
     "spec/**/*.ts"
   ]

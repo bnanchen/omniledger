@@ -1,6 +1,6 @@
 import { Group, Point, Scalar } from "@dedis/kyber";
 import { schnorr } from "@dedis/kyber/sign";
-import { Private, Public } from "../dynacred/KeyPair";
+import { Private, Public } from "./dynacred/KeyPair";
 import GroupDefinitionCollection from "./groupDefinitionCollection";
 
 // variables of a GroupDefinition
