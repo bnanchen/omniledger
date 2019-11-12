@@ -1,20 +1,18 @@
-import { curve, Group, Point, Scalar } from "@dedis/kyber";
+import { Group, Point, Scalar } from "@dedis/kyber";
 import { schnorr } from "@dedis/kyber/sign";
 import { Private, Public } from "./dynacred/KeyPair";
 import GroupDefinitionCollection from "./groupDefinitionCollection";
 
-const HEX_ENCODING: string = "hex";
-
 // variables of a GroupDefinition
 export interface IGroupDefinition {
-    contractID?: string;
-    orgPubKeys: Public[];
-    suite: Group;
-    voteThreshold: number;
-    purpose: string;
-    signatures?: string[];
-    successor?: string[];
-    predecessor?: string[];
+    contractID?: Scalar;
+    readonly orgPubKeys: Public[];
+    readonly suite: Group;
+    readonly voteThreshold: number;
+    readonly purpose: string;
+    readonly signatures?: string[];
+    successor?: Scalar[];
+    readonly predecessor?: Scalar[];
     creationTime?: Date;
     lastTimeModified?: Date;
     voteThresholdEvolution?: boolean;
@@ -23,43 +21,31 @@ export interface IGroupDefinition {
 
 export class GroupDefinition {
 
-    static createFromJSON(text: string): GroupDefinition {
-        const jsonText = JSON.parse(text);
+    static createFromJSON(jsonText: string): GroupDefinition {
+        const jsonObject = JSON.parse(jsonText);
 
         // check the JSON soundness
-        if (!jsonText.hasOwnProperty("orgPubKeys")) {
+        if (!jsonObject.hasOwnProperty("contractID")) {
+            throw new Error("Property is contractID missing from the JSON");
+        } else if (!jsonObject.hasOwnProperty("orgPubKeys")) {
             throw new Error("Property orgPubKeys is missing from the JSON");
-        } else if (!jsonText.hasOwnProperty("voteThreshold")) {
+        } else if (!jsonObject.hasOwnProperty("voteThreshold")) {
             throw new Error("Property voteThreshold is missing from the JSON");
-        } else if (!jsonText.hasOwnProperty("purpose")) {
+        } else if (!jsonObject.hasOwnProperty("signatures")) {
+            throw new Error("Property signatures is missing from the JSON");
+        } else if (!jsonObject.hasOwnProperty("successor")) {
+            throw new Error("Property successor is missing from the JSON");
+        } else if (!jsonObject.hasOwnProperty("predecessor")) {
+            throw new Error("Property predecessor is missing from the JSON");
+        } else if (!jsonObject.hasOwnProperty("creationTime")) {
+            throw new Error("Property creationTime is missing from the JSON");
+        } else if (!jsonObject.hasOwnProperty("purpose")) {
             throw new Error("Property purpose is missing from the JSON");
-        }
-        // TODO
-        // else if (!jsonObject.hasOwnProperty("suite")) {
-        //     throw new Error("Property suite is missing from the JSON");
-        // }
-
-        // type translation for some properties
-        const orgPubKeys: Public[] = jsonText.orgPubKeys.map((pubKey) => Public.fromHex(pubKey));
-        // TODO how to manage suite?
-        const suite: Group = curve.newCurve("edwards25519");
-
-        const jsonObject: IGroupDefinition = {
-            contractID: jsonText.contractID,
-            orgPubKeys,
-            suite,
-            voteThreshold: +jsonText.voteThreshold,
-            purpose: jsonText.purpose,
-            signatures: jsonText.signatures,
-            successor: jsonText.successor,
-            predecessor: jsonText.predecessor,
-            creationTime: new Date(jsonText.creationTime),
-            lastTimeModified: new Date(jsonText.lastTimeModified),
-            voteThresholdEvolution: jsonText.voteThresholdEvolution ? JSON.parse(jsonText) : undefined,
-            purposeEvolution: jsonText.purposeEvolution ? JSON.parse(jsonText) : undefined,
+        } else if (!jsonObject.hasOwnProperty("suite")) {
+            throw new Error("Property suite is missing from the JSON");
         }
 
-        return new GroupDefinition(jsonObject);
+        return new GroupDefinition(jsonObject as IGroupDefinition);
     }
 
     private variables: IGroupDefinition;
@@ -67,53 +53,28 @@ export class GroupDefinition {
     constructor(variables: IGroupDefinition) {
         this.variables = variables;
 
-        this.variables.creationTime = variables.creationTime ? variables.creationTime : new Date();
-        this.variables.lastTimeModified = variables.lastTimeModified ? variables.lastTimeModified : new Date();
-
-        if (!this.variables.predecessor) {
-            this.variables.predecessor = [];
-        }
-
-        if (!this.variables.signatures) {
-            this.variables.signatures = [];
-        }
-
+        this.variables.creationTime = typeof variables.creationTime === "undefined" ? new Date() : variables.creationTime;
+        this.variables.lastTimeModified = typeof variables.lastTimeModified === "undefined" ? new Date() : variables.lastTimeModified;
         if (!this.variables.contractID) {
             const toBeHashed: Buffer[] = [
                 this.variables.orgPubKeys.join(),
                 this.variables.voteThreshold.toFixed(),
                 this.variables.purpose,
-                this.variables.predecessor.join(),
+                this.variables.predecessor.map((p) => p.marshalBinary().toString()).join(),
                 this.variables.creationTime.toISOString(),
-            ].map((el) => Buffer.from(el));
-            this.variables.contractID = schnorr.hashSchnorr(this.variables.suite, ...toBeHashed).marshalBinary().toString(HEX_ENCODING);
+            ].map((el) => new Buffer(el));
+            this.variables.contractID = schnorr.hashSchnorr(this.variables.suite, ...toBeHashed);
         }
     }
 
     toJSON(): string {
-        // TODO find a solution for field "suite"
-        const jsonObject = {
-            contractID: this.variables.contractID,
-            orgPubKeys: this.variables.orgPubKeys.map((pubKey) => pubKey.toHex()),
-            // suite: Group,
-            voteThreshold: this.variables.voteThreshold,
-            purpose: this.variables.purpose,
-            signatures: this.variables.signatures,
-            successor: this.variables.successor ? this.variables.successor : undefined,
-            predecessor: this.variables.predecessor ? this.variables.predecessor : undefined,
-            creationTime: this.variables.creationTime,
-            lastTimeModified: this.variables.lastTimeModified,
-            voteThresholdEvolution: this.variables.voteThresholdEvolution,
-            purposeEvolution: this.variables.purposeEvolution,
-        };
-
-        return JSON.stringify(jsonObject);
+        return JSON.stringify(this.variables as IGroupDefinition);
     }
 
     addSignature(privateKey: Private) {
         // create signature
-        const message: Buffer = Buffer.from(this.variables.contractID, HEX_ENCODING);
-        const signature: string = schnorr.sign(this.variables.suite, privateKey.scalar, message).toString(HEX_ENCODING);
+        const message: Buffer = this.variables.contractID.marshalBinary();
+        const signature: string = schnorr.sign(this.variables.suite, privateKey.scalar, message).toString("hex");
         // append signature
         this.variables.signatures.push(signature);
         this.variables.lastTimeModified = new Date();
@@ -124,24 +85,23 @@ export class GroupDefinition {
         const toBeHashed: Buffer[] = [
             this.variables.orgPubKeys.join(),
             this.variables.voteThreshold.toFixed(),
-            this.variables.purpose,
-            this.variables.predecessor.join(),
+            this.variables.predecessor.map((p) => p.marshalBinary.toString()).join(),
             this.variables.creationTime.toISOString(),
-        ].map((el) => Buffer.from(el));
-        const contractIDToCheck = schnorr.hashSchnorr(this.variables.suite, ...toBeHashed).marshalBinary().toString(HEX_ENCODING);
+        ].map((el) => new Buffer(el));
+        const contractIDToCheck = schnorr.hashSchnorr(this.variables.suite, ...toBeHashed);
         if (contractIDToCheck !== this.variables.contractID) {
             return false;
         }
 
         // verify signatures
-        const message: Buffer = Buffer.from(this.variables.contractID, HEX_ENCODING);
+        const message = this.variables.contractID.marshalBinary();
         const verifiedSig: boolean[] = this.variables.signatures.map((sig: string) => {
             for (const pubKey of this.variables.orgPubKeys) {
-                if (schnorr.verify(this.variables.suite, pubKey.point, message, Buffer.from(sig, HEX_ENCODING))) {
+                if (schnorr.verify(this.variables.suite, pubKey.point, message, new Buffer(sig))) {
                     return true;
                 }
+                return false;
             }
-            return false;
         });
         if (!verifiedSig.reduce((bool1, bool2) => bool1 && bool2)) {
             return false;
@@ -181,7 +141,6 @@ export class GroupDefinition {
 
     // TODO useful? Do it recursively
     // TODO to be tested
-    // TODO to be displaced into groupDefinitionCollection
     getWorldView(groupDefinition: GroupDefinition) {
         const groupDefinitionCollection = GroupDefinitionCollection.getInstance();
         const children = groupDefinitionCollection.getChildren(groupDefinition);
@@ -190,7 +149,7 @@ export class GroupDefinition {
         });
     }
 
-    get contractID(): string {
+    get contractID(): Scalar {
         return this.variables.contractID;
     }
 
@@ -218,11 +177,11 @@ export class GroupDefinition {
         return this.variables.signatures;
     }
 
-    get predecessor(): string[] {
+    get predecessor(): Scalar[] {
         return this.variables.predecessor;
     }
 
-    get successor(): string[] {
+    get successor(): Scalar[] {
         return this.variables.successor;
     }
 
