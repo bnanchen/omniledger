@@ -15,6 +15,7 @@
             "no-public"
         ],
         "max-classes-per-file": false,
+        "object-literal-sort-keys": false,
         "whitespace": [
             true,
             "check-branch",
