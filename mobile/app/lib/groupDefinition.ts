@@ -1,9 +1,8 @@
 import { curve, Group, Point, Scalar } from "@dedis/kyber";
 import { schnorr } from "@dedis/kyber/sign";
 import { Private, Public } from "./dynacred/KeyPair";
-import GroupDefinitionCollection from "./groupDefinitionCollection";
 
-const ENCODING: string = "hex";
+export const ENCODING: string = "hex";
 
 // variables of a GroupDefinition
 export interface IGroupDefinition {
@@ -143,13 +142,16 @@ export class GroupDefinition {
         }
 
         // verify signatures
-        let publicKeys: Public[] = [...this.variables.orgPubKeys];
+        // if the number of signatures is larger than the number of public keys
+        // then an organizer have signed at least twice.
+        if (this.variables.orgPubKeys.length < this.variables.signatures.length) {
+            return false;
+        }
         if (this.variables.signatures.length) {
             const message: Buffer = Buffer.from(this.variables.id, ENCODING);
             const verifiedSig: boolean[] = this.variables.signatures.map((sig: string) => {
-                for (const publicKey of publicKeys) {
+                for (const publicKey of this.variables.orgPubKeys) {
                     if (schnorr.verify(this.variables.suite, publicKey.point, message, Buffer.from(sig, ENCODING))) {
-                        publicKeys = publicKeys.filter((pk) => publicKey !== pk);
                         return true;
                     }
                 }
@@ -172,8 +174,12 @@ export class GroupDefinition {
             throw new Error("You cannot modify voteThreshold field");
         }
 
+        // reset variables
         proposition.id = undefined;
+        proposition.creationTime = undefined;
+        proposition.lastTimeModified = undefined;
         proposition.signatures = undefined;
+        proposition.successor = undefined;
         proposition.predecessor = [this.variables.id];
         const propGroupDefinition = new GroupDefinition(proposition);
         this.variables.successor.push(propGroupDefinition.variables.id);
@@ -243,6 +249,21 @@ export class GroupDefinition {
     }
 
     get allVariables(): IGroupDefinition {
-        return { ...this.variables }; // return a copy
+        // Deep copy of the object variables
+        return {
+            id: this.variables.id,
+            orgPubKeys: [...this.variables.orgPubKeys],
+            suite: this.variables.suite,
+            voteThreshold: this.variables.voteThreshold,
+            purpose: this.variables.purpose,
+            signatures: [...this.variables.signatures],
+            successor: [...this.variables.successor],
+            predecessor: [...this.variables.predecessor],
+            creationTime: this.variables.creationTime,
+            lastTimeModified: this.variables.lastTimeModified,
+            voteThresholdEvolution: this.variables.voteThresholdEvolution,
+            purposeEvolution: this.variables.purposeEvolution,
+
+        };
     }
 }

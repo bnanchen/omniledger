@@ -1,12 +1,11 @@
-import { GroupDefinition } from "./groupDefinition";
+import { schnorr } from "@dedis/kyber/sign";
+import { Public } from "./dynacred/KeyPair";
+import { ENCODING, GroupDefinition } from "./groupDefinition";
 
 export default class GroupDefinitionCollection {
 
     private collection: Map<string, GroupDefinition>; // key: contractID, value: GroupDefinition
     private purpose: string;
-    // TODO useful?
-    private rootID: string;
-    private currentContractID: string;
 
     constructor(purpose: string) {
         this.collection = new Map();
@@ -17,10 +16,6 @@ export default class GroupDefinitionCollection {
         // only proceed if the the groupDefinition is sound
         if (!groupDefinition.verify()) {
             throw new Error("not verified");
-        }
-
-        if (!this.rootID) {
-            this.rootID = groupDefinition.id;
         }
 
         // check if the contractID is not already there
@@ -47,30 +42,44 @@ export default class GroupDefinitionCollection {
         return this.collection.get(contractID);
     }
 
-    // TODO
-    // getLastGroupDefinition(): GroupDefinition[] {
-    //     // TODO should I take into consideration the public key of the organizer calling this method to get the current groupDefinition?
-    //     const lastGroupDefinition: GroupDefinition[] = [];
-    //     this.collection.forEach((gd: GroupDefinition) => {
-    //         if (!gd.successor.length) {
-    //             let lastGD = gd;
-    //             while (!lastGD.validate()) {
-    //                 // normally should have only one predecessor
-    //                 lastGD = this.collection.get(lastGD.predecessor[0]);
-    //             }
-    //             lastGroupDefinition.push(lastGD);
-    //         }
-    //     });
+    getCurrentGroupDefinition(publicKey: Public): GroupDefinition {
+        const sortedGroupDefinitions = Array.from(this.collection.values()).sort((gd1, gd2) => {
+            if (gd1.creationTime < gd2.creationTime) {
+                return 1;
+            } else if (gd1.creationTime === gd2.creationTime) {
+                return 0;
+            } else {
+                return -1;
+            }
+        });
 
-    //     return lastGroupDefinition;
-    // }
+        for (const gd of sortedGroupDefinitions) {
+            if (gd.verify() && this.isValid(gd)) {
+                if (gd.signatures.length) {
+                    const message: Buffer = Buffer.from(gd.id, ENCODING);
+                    for (const sig of gd.signatures) {
+                        if (schnorr.verify(gd.suite, publicKey.point, message, Buffer.from(sig, ENCODING))) {
+                            return gd;
+                        }
+                    }
+                }
+            }
+        }
 
-    // TODO useful? Do it recursively
+        return undefined;
+    }
+
+    // returns [gd] if there is no child to gd
+    // returns [[gd,gd2], [gd,gd3]] if there is two children to gd
     getWorldView(groupDefinition: GroupDefinition) {
         const children = this.getChildren(groupDefinition);
-        return children.map((c: GroupDefinition) => {
-            return this.getWorldView(c).unshift(groupDefinition);
-        });
+        if (!children.length) {
+            return [groupDefinition];
+        } else {
+            return children.map((c: GroupDefinition) => {
+                return [].concat(...[groupDefinition].concat(this.getWorldView(c)));
+            });
+        }
     }
 
     getChildren(groupDefinition: GroupDefinition): GroupDefinition[] {
