@@ -1,7 +1,7 @@
 import { curve } from "@dedis/kyber";
 import Log from "../app/lib/cothority/log";
 import { KeyPair } from "../app/lib/dynacred/KeyPair";
-import { GroupDefinition } from "../app/lib/groupDefinition";
+import { GroupDefinition, IGroupDefinition } from "../app/lib/groupDefinition";
 import GroupDefinitionCollection from "../app/lib/groupDefinitionCollection";
 
 const ed25519 = curve.newCurve("edwards25519");
@@ -29,7 +29,6 @@ describe("Group Management", () => {
 
         // user2 accepts the group definition
         user2OriginalGD.addSignature(user2._private);
-
         expect(user2OriginalGD.verify()).toBeTruthy();
         Log.print("Test basic behaviour passed!");
     });
@@ -73,6 +72,7 @@ describe("Group Management", () => {
         // first test
         expect(gdCollection.has(gd1)).toBeTruthy();
         expect(gdCollection.get(gd1.id)).toEqual(gd1);
+        expect(gdCollection.getWorldView(gd1)).toEqual([gd1]);
         Log.print("First part of test GroupDefinitionList passed!");
 
         // new user
@@ -82,7 +82,6 @@ describe("Group Management", () => {
         const newVar = gd1.allVariables;
         newVar.orgPubKeys.push(user3._public);
         let gd2: GroupDefinition = gd1.proposeNewGroupDefinition(newVar);
-
         // append to the group definition collection
         gdCollection.append(gd2);
 
@@ -113,6 +112,9 @@ describe("Group Management", () => {
         expect(gdCollection.getChildren(gd1)).toEqual([gd2]);
         expect(gdCollection.isValid(gd1)).toBeTruthy();
         expect(gdCollection.isValid(gd2)).toBeTruthy();
+        expect(gdCollection.getWorldView(gd1)).toEqual([[gd1, gd2]]);
+        expect(gdCollection.getWorldView(gd2)).toEqual([gd2]);
+        expect(gdCollection.getCurrentGroupDefinition(user1._public)).toEqual(gd2);
         Log.print("Second part of test GroupDescriptionCollection is passed!");
     });
     it("Test multiple signature by same user", () => {
@@ -142,4 +144,63 @@ describe("Group Management", () => {
         expect(user2OriginalGD.verify()).toBeFalsy();
         Log.print("Test multiple signature by same user passed!");
     });
+    it("Test getWorldView with multiple branches", () => {
+        const user1 = new KeyPair();
+        const user2 = new KeyPair();
+
+        // creation of the first group definition
+        let variables: IGroupDefinition = {
+            orgPubKeys: [user1._public, user2._public],
+            suite: ed25519,
+            voteThreshold: 50.0,
+            purpose: "Test",
+            voteThresholdEvolution: true,
+        };
+
+        // creates four group definitions
+        //          gd0
+        //          / \
+        //        gd1  gd3
+        //        /
+        //      gd2
+        const gdCollection = new GroupDefinitionCollection(variables.purpose);
+        const gd0 = new GroupDefinition(variables);
+
+        variables = gd0.allVariables;
+        variables.voteThreshold = 40.0;
+        const gd1 = gd0.proposeNewGroupDefinition(variables);
+
+        sleep(1000);
+
+        variables = gd1.allVariables;
+        variables.voteThreshold = 30.0;
+        const gd2 = gd1.proposeNewGroupDefinition(variables);
+
+        sleep(1000);
+
+        variables = gd0.allVariables;
+        variables.voteThreshold = 90.0;
+        const gd3 = gd0.proposeNewGroupDefinition(variables);
+
+        sleep(1000);
+
+        gdCollection.append(gd0);
+        gdCollection.append(gd1);
+        gdCollection.append(gd2);
+        gdCollection.append(gd3);
+
+        expect(gdCollection.getWorldView(gd0)).toEqual([[gd0, gd1, gd2], [gd0, gd3]]);
+        Log.print("Test getWorldView with multiples branches passed!");
+        expect(gdCollection.getCurrentGroupDefinition(user1._public)).toEqual(undefined);
+    });
 });
+
+// helping method
+function sleep(milliseconds) {
+    const start = new Date().getTime();
+    for (let i = 0; i < 1e7; i++) {
+        if ((new Date().getTime() - start) > milliseconds) {
+            break;
+        }
+    }
+}
