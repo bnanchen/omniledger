@@ -1,8 +1,8 @@
 import { curve } from "@dedis/kyber";
 import Log from "../app/lib/cothority/log";
 import { KeyPair } from "../app/lib/dynacred/KeyPair";
-import { GroupDefinition, IGroupDefinition } from "../app/lib/groupDefinition";
-import GroupDefinitionCollection from "../app/lib/groupDefinitionCollection";
+import { GroupDefinition, IGroupDefinition } from "../app/lib/group/groupDefinition";
+import GroupDefinitionCollection from "../app/lib/group/groupDefinitionCollection";
 
 const ed25519 = curve.newCurve("edwards25519");
 
