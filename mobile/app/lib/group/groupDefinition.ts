@@ -5,45 +5,45 @@ import { ENCODING } from "./groupContract";
 
 // variables of a GroupDefinition
 export interface IGroupDefinition {
-    orgPubKeys: Public[];
-    suite: Group;
-    voteThreshold: number;
+    orgPubKeys: string[];
+    suite: string;
+    voteThreshold: string;
     purpose: string;
     predecessor?: string[];
 }
 
 export class GroupDefinition {
 
-    static createFromJSON(json: string): GroupDefinition {
-        const jsonText = JSON.parse(json);
+    static createFromJSON(json: IGroupDefinition): GroupDefinition {
+        // const jsonText = JSON.parse(json);
 
         // check the JSON soundness
-        if (!jsonText.hasOwnProperty("orgPubKeys")) {
+        if (!json.hasOwnProperty("orgPubKeys")) {
             throw new Error("Property orgPubKeys is missing from the JSON");
-        } else if (!jsonText.hasOwnProperty("voteThreshold")) {
+        } else if (!json.hasOwnProperty("voteThreshold")) {
             throw new Error("Property voteThreshold is missing from the JSON");
-        } else if (!jsonText.hasOwnProperty("purpose")) {
+        } else if (!json.hasOwnProperty("purpose")) {
             throw new Error("Property purpose is missing from the JSON");
+        } else if (!json.hasOwnProperty("suite")) {
+            throw new Error("Property suite is missing from the JSON");
         }
-        // TODO
-        // else if (!jsonObject.hasOwnProperty("suite")) {
-        //     throw new Error("Property suite is missing from the JSON");
-        // }
-
-        // type translation for some properties
-        const orgPubKeys: Public[] = jsonText.orgPubKeys.map((pubKey) => Public.fromHex(pubKey));
-        // TODO how to manage suite?
-        const suite: Group = curve.newCurve("edwards25519");
 
         const jsonObject: IGroupDefinition = {
-            orgPubKeys,
-            suite,
-            voteThreshold: +jsonText.voteThreshold,
-            purpose: jsonText.purpose,
-            predecessor: jsonText.predecessor ? jsonText.predecessor : [],
+            orgPubKeys: json.orgPubKeys,
+            suite: json.suite,
+            voteThreshold: json.voteThreshold,
+            purpose: json.purpose,
+            predecessor: json.predecessor ? json.predecessor : [],
         };
 
         return new GroupDefinition(jsonObject);
+    }
+
+    private static getGroup(suite: string): Group {
+        switch (suite) {
+            case "edwards25519":
+                return curve.newCurve("edwards25519");
+        }
     }
 
     private variables: IGroupDefinition;
@@ -54,19 +54,6 @@ export class GroupDefinition {
         if (!this.variables.predecessor) {
             this.variables.predecessor = [];
         }
-    }
-
-    toJSON(): string {
-        // TODO find a solution for field "suite"
-        const jsonObject = {
-            orgPubKeys: this.variables.orgPubKeys.map((pubKey) => pubKey.toHex()),
-            // suite: Group,
-            voteThreshold: this.variables.voteThreshold,
-            purpose: this.variables.purpose,
-            predecessor: this.variables.predecessor ? this.variables.predecessor : undefined,
-        };
-
-        return JSON.stringify(jsonObject);
     }
 
     // verify the soundess of the group definition; not if the threshold has been reached
@@ -80,9 +67,10 @@ export class GroupDefinition {
 
         if (signoffs.length) {
             const message: Buffer = Buffer.from(id, ENCODING);
+            const suite: Group = GroupDefinition.getGroup(this.variables.suite);
             const verifiedSig: boolean[] = signoffs.map((sig: string) => {
                 for (const publicKey of this.variables.orgPubKeys) {
-                    if (schnorr.verify(this.variables.suite, publicKey.point, message, Buffer.from(sig, ENCODING))) {
+                    if (schnorr.verify(suite, Public.fromHex(publicKey).point, message, Buffer.from(sig, ENCODING))) {
                         return true;
                     }
                 }
@@ -96,7 +84,18 @@ export class GroupDefinition {
         return true;
     }
 
-    get publicKeys(): Public[] {
+    toJSON(): IGroupDefinition {
+        // TODO find a solution for field "suite"
+        return {
+            orgPubKeys: this.variables.orgPubKeys,
+            suite: this.variables.suite, // suite: Group,
+            voteThreshold: this.variables.voteThreshold,
+            purpose: this.variables.purpose,
+            predecessor: this.variables.predecessor ? this.variables.predecessor : undefined,
+        };
+    }
+
+    get publicKeys(): string[] {
         return this.variables.orgPubKeys;
     }
 
@@ -104,11 +103,15 @@ export class GroupDefinition {
         return this.variables.orgPubKeys.length;
     }
 
-    get suite(): Group {
+    get suite(): string {
         return this.variables.suite;
     }
 
-    get voteThreshold(): number {
+    get suiteGroup(): Group {
+        return GroupDefinition.getGroup(this.variables.suite);
+    }
+
+    get voteThreshold(): string {
         return this.variables.voteThreshold;
     }
 

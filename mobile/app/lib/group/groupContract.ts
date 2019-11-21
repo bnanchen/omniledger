@@ -1,19 +1,25 @@
 import { schnorr } from "@dedis/kyber/sign";
 import { Private } from "../dynacred";
-import { Public } from "../dynacred/KeyPair";
 import { GroupDefinition, IGroupDefinition } from "./groupDefinition";
+import { Group } from "@dedis/kyber";
 
 export const ENCODING: string = "hex";
 
+export interface IGroupContract {
+    id: string;
+    groupDefinition: IGroupDefinition;
+    signoffs: string[];
+    successor: string[];
+}
+
 export class GroupContract {
 
-    static createFromJSON(json: string): GroupContract {
-        const jsonText = JSON.parse(json);
+    static createFromJSON(json: IGroupContract): GroupContract {
 
         // TODO test the id
 
-        const groupDefinition = GroupDefinition.createFromJSON(jsonText.groupDefinition);
-        return new GroupContract(groupDefinition, jsonText.signoffs);
+        const groupDefinition = GroupDefinition.createFromJSON(json.groupDefinition);
+        return new GroupContract(groupDefinition, json.signoffs);
     }
 
     private _id: string;
@@ -24,7 +30,7 @@ export class GroupContract {
     constructor(groupDefinition: GroupDefinition, signoffs = []) {
         this._groupDefinition = groupDefinition;
         // tslint:disable-next-line: max-line-length
-        this._id = schnorr.hashSchnorr(this._groupDefinition.suite, Buffer.from(this._groupDefinition.toJSON())).marshalBinary().toString(ENCODING);
+        this._id = schnorr.hashSchnorr(this._groupDefinition.suiteGroup, Buffer.from(JSON.stringify(this._groupDefinition.toJSON()))).marshalBinary().toString(ENCODING);
         this._signoffs = signoffs;
         this._successor = [];
     }
@@ -33,7 +39,7 @@ export class GroupContract {
         // create signature
         const message: Buffer = Buffer.from(this._id, ENCODING);
         // tslint:disable-next-line: max-line-length
-        const signature: string = schnorr.sign(this._groupDefinition.suite, privateKey.scalar, message).toString(ENCODING);
+        const signature: string = schnorr.sign(this._groupDefinition.suiteGroup, privateKey.scalar, message).toString(ENCODING);
 
         // append signature
         this._signoffs.push(signature);
@@ -62,27 +68,21 @@ export class GroupContract {
         }
     }
 
-    toJSON(): string {
-        const jsonObject = {
+    toJSON(): IGroupContract {
+        return {
             id: this._id,
-            groupDefinition: this.groupDefinition.toJSON(),
+            groupDefinition: this._groupDefinition.toJSON(),
             signoffs: this._signoffs,
             successor: this._successor,
         };
-
-        return JSON.stringify(jsonObject);
     }
 
     get id(): string {
         return this._id;
     }
 
-    get groupDefinition(): GroupDefinition {
-        return this._groupDefinition;
-    }
-
-    get groupDefinitionVariables(): IGroupDefinition {
-        return this.groupDefinition.allVariables;
+    get groupDefinition(): IGroupDefinition {
+        return this._groupDefinition.allVariables;
     }
 
     get signoffs(): string[] {
@@ -93,15 +93,19 @@ export class GroupContract {
         return this._successor;
     }
 
-    get publicKeys(): Public[] {
-        return this.groupDefinition.publicKeys;
+    get publicKeys(): string[] {
+        return this._groupDefinition.publicKeys;
     }
 
-    get voteThreshold(): number {
-        return this.groupDefinition.voteThreshold;
+    get voteThreshold(): string {
+        return this._groupDefinition.voteThreshold;
     }
 
     get predecessor(): string[] {
-        return this.groupDefinition.predecessor;
+        return this._groupDefinition.predecessor;
+    }
+
+    get suite(): Group {
+        return this._groupDefinition.suiteGroup;
     }
 }
