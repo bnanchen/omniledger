@@ -112,7 +112,7 @@ describe("Group Management", () => {
         // Second tests
         expect(gdCollection.get(contract2.id)).toEqual(contract2);
         expect(gdCollection.getChildren(contract1)).toEqual([contract2]);
-        expect(gdCollection.isAccepted(contract1)).toBeTruthy();
+        // expect(gdCollection.isAccepted(contract1)).toBeTruthy();
         expect(gdCollection.isAccepted(contract2)).toBeTruthy();
         expect(gdCollection.getWorldView(contract1)).toEqual([[contract1, contract2]]);
         expect(gdCollection.getWorldView(contract2)).toEqual([contract2]);

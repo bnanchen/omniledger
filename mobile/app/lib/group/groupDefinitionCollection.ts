@@ -43,7 +43,6 @@ export default class GroupContractCollection {
         return this.collection.get(id);
     }
 
-    // FIXME review the algorithm
     getCurrentGroupContract(publicKey: Public): GroupContract {
         const eligibleContracts = Array.from(this.collection.values()).filter((c) => c.successor.length === 0);
 
@@ -63,33 +62,6 @@ export default class GroupContractCollection {
         }
         return undefined;
     }
-    // getCurrentGroupContract(publicKey: Public): GroupContract {
-    //     const sortedGroupContracts = Array.from(this.collection.values()).sort((gd1, gd2) => {
-    //         if (gd1.creationTime < gd2.creationTime) {
-    //             return 1;
-    //         } else if (gd1.creationTime === gd2.creationTime) {
-    //             return 0;
-    //         } else {
-    //             return -1;
-    //         }
-    //     });
-
-    //     for (const gd of sortedGroupContracts) {
-    //         if (gd.verify() && this.isValid(gd)) {
-    //             if (gd.signoffs.length) {
-    //                 const message: Buffer = Buffer.from(gd.id, ENCODING);
-    //                 for (const sig of gd.signoffs) {
-    //                     // tslint:disable-next-line: max-line-length
-    //                     if (schnorr.verify(gd.groupDefinition.suite, publicKey.point, message, Buffer.from(sig, ENCODING))) {
-    //                         return gd;
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //     }
-
-    //     return undefined;
-    // }
 
     // returns [gd] if there is no child to gd
     // returns [[gd,gd2], [gd,gd3]] if there is two children to gd
@@ -104,7 +76,19 @@ export default class GroupContractCollection {
         }
     }
 
+    getParent(groupContract: GroupContract): GroupContract[] {
+        if (!groupContract.predecessor.length) {
+            return [];
+        }
+
+        return groupContract.predecessor.map((id: string) => this.collection.get(id));
+    }
+
     getChildren(groupContract: GroupContract): GroupContract[] {
+        if (!groupContract.successor.length) {
+            return [];
+        }
+
         return groupContract.successor.map((id: string) => this.collection.get(id));
     }
 
@@ -116,18 +100,57 @@ export default class GroupContractCollection {
         }
 
         if (groupContract.predecessor.length) {
-            if (groupContract.predecessor.length === 1) {
-                const parent: GroupContract = this.collection.get(groupContract.predecessor[0]);
-                // tslint:disable-next-line: max-line-length
-                return this.meetVoteThreshold(parent.voteThreshold, groupContract.signoffs.length / parent.publicKeys.length);
-            } else {
-                // const parent: GroupDefinition = this.collection.get(group)
+            const parent = this.getParent(groupContract);
+            console.log(parent);
+            const verifiedParent = parent.map((p: GroupContract) => {
+                if (!this.verifySignoffs(groupContract, p)) {
+                    console.log("ici1");
+                    return false;
+                }
 
+                if (!this.meetVoteThreshold(p.voteThreshold, groupContract.signoffs.length/p.publicKeys.length)) {
+                    console.log("ici2");
+                    return false;
+                }
+
+                return true;
+            });
+
+            if (!verifiedParent.reduce((bool1, bool2) => bool1 && bool2)) {
+                console.log("ici3");
+                return false;
             }
+
+            return true;
         } else {
             // tslint:disable-next-line: max-line-length
-            return this.meetVoteThreshold(groupContract.voteThreshold, groupContract.signoffs.length / groupContract.publicKeys.length);
+            return this.meetVoteThreshold(groupContract.voteThreshold, groupContract.signoffs.length/groupContract.publicKeys.length);
         }
+    }
+
+    private verifySignoffs(groupContract: GroupContract, parent: GroupContract): boolean {
+        const publicKeys = [...parent.publicKeys];
+        console.log(groupContract.signoffs);
+        console.log(publicKeys);
+        // verify that every signature correspond to one and only one parent public key
+        if (groupContract.signoffs.length) {
+            const message: Buffer = Buffer.from(groupContract.id, ENCODING);
+            const suite: Group = groupContract.suite;
+            const verifiedSig: boolean[] = groupContract.signoffs.map((sig: string) => {
+                for (const publicKey of publicKeys) {
+                    if (schnorr.verify(suite, Public.fromHex(publicKey).point, message, Buffer.from(sig, ENCODING))) {
+                        publicKeys.splice(publicKeys.indexOf(publicKey), 1);
+                        return true;
+                    }
+                }
+                return false;
+            });
+            if (!verifiedSig.reduce((bool1, bool2) => bool1 && bool2)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private meetVoteThreshold(voteThreshold: string, ratio: number): boolean {
