@@ -13,7 +13,7 @@ export interface IGroupContract {
 }
 
 export class GroupContract {
-
+    // TODO GroupContract est un container qui gère tous les éléments
     static createFromJSON(json: IGroupContract): GroupContract {
 
         // TODO test the id
@@ -24,32 +24,17 @@ export class GroupContract {
 
     private _id: string;
     private _groupDefinition: GroupDefinition;
-    private _signoffs: string[];
+    private _signoffs: string[]; // class signoff avec static createSignoff
     private _successor: string[];
 
     constructor(groupDefinition: GroupDefinition, signoffs = []) {
         this._groupDefinition = groupDefinition;
-        // tslint:disable-next-line: max-line-length
-        this._id = schnorr.hashSchnorr(this._groupDefinition.suiteGroup, Buffer.from(JSON.stringify(this._groupDefinition.toJSON()))).marshalBinary().toString(ENCODING);
+        this._id =  groupDefinition.getId();
         this._signoffs = signoffs;
         this._successor = [];
     }
 
-    sign(privateKey: Private) {
-        // create signature
-        const message: Buffer = Buffer.from(this._id, ENCODING);
-        // tslint:disable-next-line: max-line-length
-        const signature: string = schnorr.sign(this._groupDefinition.suiteGroup, privateKey.scalar, message).toString(ENCODING);
-
-        // append signature
-        this._signoffs.push(signature);
-    }
-
-    verify(): boolean {
-        return this._groupDefinition.verify(this._id, this._signoffs);
-    }
-
-    proposeNewGroupContract(newGroupDefinition: GroupDefinition): GroupContract {
+    proposeGroupContract(newGroupDefinition: GroupDefinition): GroupContract {
         if (!newGroupDefinition.predecessor.includes(this._id)) {
             newGroupDefinition.predecessor.push(this._id);
         }
@@ -57,6 +42,20 @@ export class GroupContract {
         const newGroupContract = new GroupContract(newGroupDefinition);
         this._successor.push(newGroupContract._id);
         return newGroupContract;
+    }
+
+    appendSignoff(signoff: string, p: GroupContract): boolean {
+        // check the signoff
+        if (!this._groupDefinition.verifySignoff(signoff, p.groupDefinition)) {
+            return false;
+        }
+
+        this._signoffs.push(signoff);
+        return true;
+    }
+
+    verify(parent: GroupContract): boolean {
+        return this._groupDefinition.verify(this._signoffs, parent ? parent.groupDefinition : undefined);
     }
 
     mergeSignoffs(groupContract: GroupContract) {
@@ -81,8 +80,8 @@ export class GroupContract {
         return this._id;
     }
 
-    get groupDefinition(): IGroupDefinition {
-        return this._groupDefinition.allVariables;
+    get groupDefinition(): GroupDefinition {
+        return this._groupDefinition;
     }
 
     get signoffs(): string[] {

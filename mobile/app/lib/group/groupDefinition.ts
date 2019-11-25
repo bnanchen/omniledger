@@ -1,7 +1,7 @@
 import { curve, Group, Point, Scalar } from "@dedis/kyber";
 import { schnorr } from "@dedis/kyber/sign";
 import { Private, Public } from "../dynacred/KeyPair";
-import { ENCODING } from "./groupContract";
+import { ENCODING, GroupContract } from "./groupContract";
 
 // variables of a GroupDefinition
 export interface IGroupDefinition {
@@ -56,8 +56,17 @@ export class GroupDefinition {
         }
     }
 
+    sign(privateKey: Private): string {
+        const message: Buffer = Buffer.from(this.getId(), ENCODING);
+        return schnorr.sign(this.suiteGroup, privateKey.scalar, message).toString(ENCODING);
+    }
+
     // verify the soundess of the group definition; not if the threshold has been reached
-    verify(id: string, signoffs: string[]): boolean {
+    verify(signoffs: string[], parent: GroupDefinition): boolean {
+        if (!this.verifyId(parent)) {
+            return false;
+        }
+
         // verify signatures
         // if the number of signatures is larger than the number of public keys
         // then an organizer have signed at least twice.
@@ -65,34 +74,57 @@ export class GroupDefinition {
             return false;
         }
 
+        const publicKeys = parent ? [...parent.publicKeys] : [...this.publicKeys];
+        const id = this.getId();
+        // verify that every signoff correspond to one and only one parent public key
         if (signoffs.length) {
             const message: Buffer = Buffer.from(id, ENCODING);
-            const suite: Group = GroupDefinition.getGroup(this.variables.suite);
-            const verifiedSig: boolean[] = signoffs.map((sig: string) => {
-                for (const publicKey of this.variables.orgPubKeys) {
-                    if (schnorr.verify(suite, Public.fromHex(publicKey).point, message, Buffer.from(sig, ENCODING))) {
+            const verifiedSignoffs: boolean[] = signoffs.map((s: string) => {
+                for (const publicKey of publicKeys) {
+                    if (this.verifySignoffWithPublicKey(s, publicKey, message)) {
+                        publicKeys.splice(publicKeys.indexOf(publicKey), 1);
                         return true;
                     }
                 }
                 return false;
             });
-            if (!verifiedSig.reduce((bool1, bool2) => bool1 && bool2)) {
-                return false;
-            }
+
+            return verifiedSignoffs.reduce((bool1, bool2) => bool1 && bool2);
         }
 
         return true;
+    }
+
+    verifySignoff(signoff: string, parent: GroupDefinition): boolean {
+        if (!this.verifyId(parent)) {
+            return false;
+        }
+
+        // check the signoff
+        const message: Buffer = Buffer.from(this.getId(), ENCODING);
+        for (const publicKey of parent.publicKeys) {
+            if (this.verifySignoffWithPublicKey(signoff, publicKey, message)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     toJSON(): IGroupDefinition {
         // TODO find a solution for field "suite"
         return {
             orgPubKeys: this.variables.orgPubKeys,
-            suite: this.variables.suite, // suite: Group,
+            suite: this.variables.suite,
             voteThreshold: this.variables.voteThreshold,
             purpose: this.variables.purpose,
             predecessor: this.variables.predecessor ? this.variables.predecessor : undefined,
         };
+    }
+
+    getId(): string {
+        const toH: Buffer = Buffer.from(JSON.stringify(this.toJSON()));
+        return schnorr.hashSchnorr(this.suiteGroup, toH).marshalBinary().toString(ENCODING);
     }
 
     get publicKeys(): string[] {
@@ -132,5 +164,22 @@ export class GroupDefinition {
             purpose: this.variables.purpose,
             predecessor: [...this.variables.predecessor],
         };
+    }
+
+    private verifyId(parent: GroupDefinition) {
+        if (parent === undefined && !this.predecessor.length) {
+            return true;
+        }
+
+        const parentId = parent.getId();
+        const parentIdx = this.predecessor.indexOf(parentId);
+        if (parentIdx === -1) {
+            return false;
+        }
+    }
+
+    private verifySignoffWithPublicKey(signoff: string, publicKey: string, message: Buffer): boolean {
+        const point: Point = Public.fromHex(publicKey).point;
+        return schnorr.verify(this.suiteGroup, point, message, Buffer.from(signoff, ENCODING));
     }
 }

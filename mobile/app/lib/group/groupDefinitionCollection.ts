@@ -1,7 +1,8 @@
 import { Group } from "@dedis/kyber";
 import { schnorr } from "@dedis/kyber/sign";
-import { Public } from "../dynacred/KeyPair";
+import { Public, Private } from "../dynacred/KeyPair";
 import { ENCODING, GroupContract } from "./groupContract";
+import { GroupDefinition } from "./groupDefinition";
 
 export default class GroupContractCollection {
 
@@ -13,10 +14,40 @@ export default class GroupContractCollection {
         this.purpose = purpose;
     }
 
+    proposeGroupContract(parent: GroupContract, groupDefinition: GroupDefinition): GroupContract {
+        let newGroupContract: GroupContract;
+        if (parent) {
+            newGroupContract = parent.proposeGroupContract(groupDefinition);
+        } else {
+            newGroupContract = new GroupContract(groupDefinition);
+        }
+        this.append(newGroupContract);
+
+        return newGroupContract;
+    }
+
+    sign(groupContract: GroupContract, privateKey: Private) {
+        // create signoff
+        const signoff: string = groupContract.groupDefinition.sign(privateKey);
+        // append signoff to groupContract
+        const parents: GroupContract[] = this.getParent(groupContract);
+        let isAppended = false;
+        for (let i = 0; i < parents.length && !isAppended; i++) {
+            isAppended = groupContract.appendSignoff(signoff, parents[i]);
+        }
+    }
+
     append(groupContract: GroupContract) {
-        // only proceed if the the groupDefinition is sound
-        if (!groupContract.verify()) {
-            throw new Error("not verified");
+        // only proceed if the the groupContract is sound
+        const parents = this.getParent(groupContract);
+        if (parents.length) {
+            if (!this.getParent(groupContract).map((p) => groupContract.verify(p)).reduce((b1, b2) => b1 && b2)) {
+                throw new TypeError("Not verified");
+            }
+        } else {
+            if (!groupContract.verify(undefined)) {
+                throw new TypeError("Not verified");
+            }
         }
 
         // check if the id is not already there
@@ -101,56 +132,19 @@ export default class GroupContractCollection {
 
         if (groupContract.predecessor.length) {
             const parent = this.getParent(groupContract);
-            console.log(parent);
             const verifiedParent = parent.map((p: GroupContract) => {
-                if (!this.verifySignoffs(groupContract, p)) {
-                    console.log("ici1");
+                if (!groupContract.verify(p)) {
                     return false;
                 }
 
-                if (!this.meetVoteThreshold(p.voteThreshold, groupContract.signoffs.length/p.publicKeys.length)) {
-                    console.log("ici2");
-                    return false;
-                }
-
-                return true;
+                return this.meetVoteThreshold(p.voteThreshold, groupContract.signoffs.length / p.publicKeys.length);
             });
 
-            if (!verifiedParent.reduce((bool1, bool2) => bool1 && bool2)) {
-                console.log("ici3");
-                return false;
-            }
-
-            return true;
+            return verifiedParent.reduce((bool1, bool2) => bool1 && bool2);
         } else {
             // tslint:disable-next-line: max-line-length
             return this.meetVoteThreshold(groupContract.voteThreshold, groupContract.signoffs.length/groupContract.publicKeys.length);
         }
-    }
-
-    private verifySignoffs(groupContract: GroupContract, parent: GroupContract): boolean {
-        const publicKeys = [...parent.publicKeys];
-        console.log(groupContract.signoffs);
-        console.log(publicKeys);
-        // verify that every signature correspond to one and only one parent public key
-        if (groupContract.signoffs.length) {
-            const message: Buffer = Buffer.from(groupContract.id, ENCODING);
-            const suite: Group = groupContract.suite;
-            const verifiedSig: boolean[] = groupContract.signoffs.map((sig: string) => {
-                for (const publicKey of publicKeys) {
-                    if (schnorr.verify(suite, Public.fromHex(publicKey).point, message, Buffer.from(sig, ENCODING))) {
-                        publicKeys.splice(publicKeys.indexOf(publicKey), 1);
-                        return true;
-                    }
-                }
-                return false;
-            });
-            if (!verifiedSig.reduce((bool1, bool2) => bool1 && bool2)) {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     private meetVoteThreshold(voteThreshold: string, ratio: number): boolean {
