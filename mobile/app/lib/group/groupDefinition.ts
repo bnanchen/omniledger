@@ -62,8 +62,8 @@ export class GroupDefinition {
     }
 
     // verify the soundess of the group definition; not if the threshold has been reached
-    verify(signoffs: string[], parent: GroupDefinition): boolean {
-        if (!this.verifyId(parent)) {
+    verify(signoffs: string[], ...parent: GroupDefinition[]): boolean {
+        if (!parent.map((p) => this.verifyId(p)).reduce((bool1: boolean, bool2: boolean) => bool1 && bool2)) {
             return false;
         }
 
@@ -74,7 +74,12 @@ export class GroupDefinition {
             return false;
         }
 
-        const publicKeys = parent ? [...parent.publicKeys] : [...this.publicKeys];
+        const publicKeys = parent[0]
+            ? [].concat(...parent.map((p) => p.publicKeys)).filter((val, idx, self) => {
+                return self.indexOf(val) === idx;
+            })
+            : [...this.publicKeys];
+
         const id = this.getId();
         // verify that every signoff correspond to one and only one parent public key
         if (signoffs.length) {
@@ -88,7 +93,7 @@ export class GroupDefinition {
                 }
                 return false;
             });
-
+            // false if there is some wrong signature (duplicate or from an unknown public key)
             return verifiedSignoffs.reduce((bool1, bool2) => bool1 && bool2);
         }
 
@@ -166,16 +171,14 @@ export class GroupDefinition {
         };
     }
 
-    private verifyId(parent: GroupDefinition) {
+    private verifyId(parent: GroupDefinition): boolean {
         if (parent === undefined && !this.predecessor.length) {
             return true;
         }
 
         const parentId = parent.getId();
         const parentIdx = this.predecessor.indexOf(parentId);
-        if (parentIdx === -1) {
-            return false;
-        }
+        return parentIdx > -1;
     }
 
     private verifySignoffWithPublicKey(signoff: string, publicKey: string, message: Buffer): boolean {

@@ -14,7 +14,7 @@ export default class GroupContractCollection {
         this.purpose = purpose;
     }
 
-    proposeGroupContract(parent: GroupContract, groupDefinition: GroupDefinition): GroupContract {
+    createGroupContract(parent: GroupContract, groupDefinition: GroupDefinition): GroupContract {
         let newGroupContract: GroupContract;
         if (parent) {
             newGroupContract = parent.proposeGroupContract(groupDefinition);
@@ -26,7 +26,7 @@ export default class GroupContractCollection {
         return newGroupContract;
     }
 
-    sign(groupContract: GroupContract, privateKey: Private) {
+    sign(groupContract: GroupContract, privateKey: Private): boolean {
         // create signoff
         const signoff: string = groupContract.groupDefinition.sign(privateKey);
         // append signoff to groupContract
@@ -35,13 +35,15 @@ export default class GroupContractCollection {
         for (let i = 0; i < parents.length && !isAppended; i++) {
             isAppended = groupContract.appendSignoff(signoff, parents[i]);
         }
+
+        return isAppended;
     }
 
     append(groupContract: GroupContract) {
         // only proceed if the the groupContract is sound
         const parents = this.getParent(groupContract);
         if (parents.length) {
-            if (!this.getParent(groupContract).map((p) => groupContract.verify(p)).reduce((b1, b2) => b1 && b2)) {
+            if (!groupContract.verify(...this.getParent(groupContract))) {
                 throw new TypeError("Not verified");
             }
         } else {
@@ -84,6 +86,7 @@ export default class GroupContractCollection {
                     const message: Buffer = Buffer.from(contract.id, ENCODING);
                     const suite: Group = contract.suite;
                     for (const sig of contract.signoffs) {
+                        // TODO try to move all the crypto to groupDefinition
                         if (schnorr.verify(suite, publicKey.point, message, Buffer.from(sig, ENCODING))) {
                             return contract;
                         }
@@ -132,12 +135,22 @@ export default class GroupContractCollection {
 
         if (groupContract.predecessor.length) {
             const parent = this.getParent(groupContract);
+            if (!groupContract.verify(...parent)) {
+                return false;
+            }
+
             const verifiedParent = parent.map((p: GroupContract) => {
-                if (!groupContract.verify(p)) {
-                    return false;
+                // we count the number of signoffs for a specific parent because
+                // when there is multiple parent each parent vote threshold need to be reached
+                // by the organizers in the parent (not all the organizers of the current group)
+                let numbSignoffsByParent = 0;
+                for (const s of groupContract.signoffs) {
+                    if (groupContract.groupDefinition.verifySignoff(s, p.groupDefinition)) {
+                        numbSignoffsByParent++;
+                    }
                 }
 
-                return this.meetVoteThreshold(p.voteThreshold, groupContract.signoffs.length / p.publicKeys.length);
+                return this.meetVoteThreshold(p.voteThreshold, numbSignoffsByParent / p.publicKeys.length);
             });
 
             return verifiedParent.reduce((bool1, bool2) => bool1 && bool2);
@@ -149,28 +162,32 @@ export default class GroupContractCollection {
 
     private meetVoteThreshold(voteThreshold: string, ratio: number): boolean {
         // Test if voteThreshold is well-formed
+        voteThreshold = voteThreshold.replace(/\s/g, ""); // remove whitespaces
         const regex = new RegExp("^(>|>=)\\d+/\\d+$");
         if (!regex.test(voteThreshold)) {
             throw new TypeError("The voteThreshold field is not well-formed");
         }
 
         let idx: number;
-        let smallerOrEqual: boolean;
-        if (voteThreshold.indexOf("=")) {
+        let biggerOrEqual: boolean;
+        if (voteThreshold.indexOf("=") > -1) {
             idx = voteThreshold.indexOf("=");
-            smallerOrEqual = true;
+            biggerOrEqual = true;
         } else {
             idx = voteThreshold.indexOf(">");
-            smallerOrEqual = false;
+            biggerOrEqual = false;
         }
 
         const fractionNumbers: number[] = voteThreshold.slice(idx + 1).split("/").map((f) => +f);
         const numericalVoteThreshold = fractionNumbers[0] / fractionNumbers[1];
         if (numericalVoteThreshold > 1.0) {
             throw new TypeError("The voteThreshold ratio needs to be between 0.0 and 1.0");
+        } else if (numericalVoteThreshold === 1.0 && !biggerOrEqual) {
+            // translate >1 to >=1 (because >1 makes no sense)
+            biggerOrEqual = true;
         }
 
-        if (smallerOrEqual) {
+        if (biggerOrEqual) {
             return ratio >= numericalVoteThreshold;
         } else {
             return ratio > numericalVoteThreshold;

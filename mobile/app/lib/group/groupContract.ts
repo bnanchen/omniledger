@@ -54,8 +54,9 @@ export class GroupContract {
         return true;
     }
 
-    verify(parent: GroupContract): boolean {
-        return this._groupDefinition.verify(this._signoffs, parent ? parent.groupDefinition : undefined);
+    verify(...parent: GroupContract[]): boolean {
+        const arg = parent[0] ? parent.map((p) => p.groupDefinition) : [undefined];
+        return this._groupDefinition.verify(this._signoffs, ...arg);
     }
 
     mergeSignoffs(groupContract: GroupContract) {

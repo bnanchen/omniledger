@@ -1,9 +1,10 @@
 import { curve } from "@dedis/kyber";
 import Log from "../app/lib/cothority/log";
 import { KeyPair } from "../app/lib/dynacred/KeyPair";
-import { GroupContract, IGroupContract } from "../app/lib/group/groupContract";
+import { GroupContract, IGroupContract, ENCODING } from "../app/lib/group/groupContract";
 import { GroupDefinition, IGroupDefinition } from "../app/lib/group/groupDefinition";
 import GroupContractCollection from "../app/lib/group/groupDefinitionCollection";
+import { schnorr } from "@dedis/kyber/sign";
 
 describe("Group Management", () => {
     it("Test GroupContractCollection", () => {
@@ -12,7 +13,7 @@ describe("Group Management", () => {
 
         // creation of the GroupContractCollection
         const purpose: string = "Test";
-        const gdCollection = new GroupContractCollection(purpose);
+        const contractCollection = new GroupContractCollection(purpose);
 
         // creation of the first group definition
         const orginialVar = {
@@ -22,154 +23,247 @@ describe("Group Management", () => {
             purpose,
         };
         let gd = new GroupDefinition(orginialVar);
-        let contract1 = gdCollection.proposeGroupContract(undefined, gd);
+        let contract0 = contractCollection.createGroupContract(undefined, gd);
 
         // user1 exchanges the first group definition
-        gdCollection.sign(contract1, user1._private);
+        contractCollection.sign(contract0, user1._private);
 
         // user2 receives the group definition by JSON
-        let jsonContract: IGroupContract = contract1.toJSON();
-        const user2Contract1 = GroupContract.createFromJSON(jsonContract);
+        let jsonContract: IGroupContract = contract0.toJSON();
+        contract0 = GroupContract.createFromJSON(jsonContract);
 
         // user2 accepts the group definition
-        gdCollection.sign(user2Contract1, user2._private);
+        let variables = gd.allVariables;
+        variables.predecessor.push(contract0.id);
+        gd = new GroupDefinition(variables);
+        let contract1 = contract0.proposeGroupContract(gd);
+        contractCollection.sign(contract1, user2._private);
 
         // user1 receives back the group definition by JSON
-        jsonContract = user2Contract1.toJSON();
+        jsonContract = contract1.toJSON();
         contract1 = GroupContract.createFromJSON(jsonContract);
 
         // update group definition Collection
-        gdCollection.append(contract1);
+        contractCollection.append(contract1);
 
         // first test
-        expect(gdCollection.has(contract1)).toBeTruthy();
-        expect(gdCollection.get(contract1.id)).toEqual(contract1);
-        expect(gdCollection.getWorldView(contract1)).toEqual([contract1]);
+        expect(contractCollection.has(contract1)).toBeTruthy();
+        expect(contractCollection.get(contract1.id)).toEqual(contract1);
+        expect(contractCollection.getWorldView(contract1)).toEqual([contract1]);
         Log.print("First part of test GroupDefinitionList passed!");
 
         // new user
-        // const user3 = new KeyPair();
+        const user3 = new KeyPair();
 
-        // // propose user3 as a new member in a new group definition
-        // const newVar = contract1.groupDefinition;
-        // newVar.orgPubKeys.push(user3._public.toHex());
-        // gd = new GroupDefinition(newVar);
-        // let contract2: GroupContract = contract1.proposeGroupContract(gd);
-        // // append to the group definition collection
-        // gdCollection.append(contract2);
+        // user1 proposes user3 as a new member in a new group definition
+        variables = gd.allVariables;
+        variables.orgPubKeys.push(user3._public.toHex());
+        gd = new GroupDefinition(variables);
+        let contract2: GroupContract = contractCollection.createGroupContract(contract1, gd);
 
-        // // user1 exchanges the first group definition
-        // contract2.sign(user1._private);
+        // user1 exchanges the first group definition
+        contractCollection.sign(contract2, user1._private);
 
-        // // user2 receives the group definition by JSON
-        // jsonContract = contract2.toJSON();
-        // const user2contract2 = GroupContract.createFromJSON(jsonContract);
+        // user2 receives the group definition by JSON
+        jsonContract = contract2.toJSON();
+        contract2 = GroupContract.createFromJSON(jsonContract);
 
-        // // user2 accepts the group definition
-        // user2contract2.sign(user2._private);
+        // user2 accepts the group definition
+        contractCollection.sign(contract2, user2._private);
 
-        // // user3 receives the group definition by JSON
-        // jsonContract = user2contract2.toJSON();
-        // const user3contract2 = GroupContract.createFromJSON(jsonContract);
+        // user3 receives the group definition by JSON
+        jsonContract = contract2.toJSON();
+        contract2 = GroupContract.createFromJSON(jsonContract);
 
-        // // user3 signs the group definition
-        // user3contract2.sign(user3._private);
+        // user3 signs the group definition
+        contractCollection.sign(contract2, user3._private);
 
-        // // user1 gets back the group definition
-        // jsonContract = user3contract2.toJSON();
-        // contract2 = GroupContract.createFromJSON(jsonContract);
-        // gdCollection.append(contract2);
+        // user1 gets back the group definition
+        jsonContract = contract2.toJSON();
+        contract2 = GroupContract.createFromJSON(jsonContract);
+        contractCollection.append(contract2);
 
-        // // Second tests
-        // expect(gdCollection.get(contract2.id)).toEqual(contract2);
-        // expect(gdCollection.getChildren(contract1)).toEqual([contract2]);
-        // // expect(gdCollection.isAccepted(contract1)).toBeTruthy();
-        // expect(gdCollection.isAccepted(contract2)).toBeTruthy();
-        // expect(gdCollection.getWorldView(contract1)).toEqual([[contract1, contract2]]);
-        // expect(gdCollection.getWorldView(contract2)).toEqual([contract2]);
-        // expect(gdCollection.getCurrentGroupContract(user1._public)).toEqual(contract2);
-        // Log.print("Second part of test GroupDescriptionCollection is passed!");
+        // Second tests
+        expect(contractCollection.get(contract2.id)).toEqual(contract2);
+        expect(contractCollection.getChildren(contract1)).toEqual([contract2]);
+        // expect(gdCollection.isAccepted(contract1)).toBeTruthy();
+        expect(contractCollection.isAccepted(contract2)).toBeTruthy();
+        expect(contractCollection.getWorldView(contract1)).toEqual([[contract1, contract2]]);
+        expect(contractCollection.getWorldView(contract2)).toEqual([contract2]);
+        expect(contractCollection.getCurrentGroupContract(user1._public)).toEqual(contract2);
+        Log.print("Second part of test GroupDescriptionCollection is passed!");
     });
-    // it("Test multiple signature by same user", () => {
-    //     const user1 = new KeyPair();
-    //     const user2 = new KeyPair();
+    it("Test multiple signature by same user", () => {
+        const user1 = new KeyPair();
+        const user2 = new KeyPair();
 
-    //     // creation of the first group definition
-    //     const originalVar = {
-    //         orgPubKeys: [user1._public.toHex(), user2._public.toHex()],
-    //         suite: "edwards25519",
-    //         voteThreshold: ">=1/2",
-    //         purpose: "Test",
-    //     };
-    //     const gd = new GroupDefinition(originalVar);
-    //     const contract1 = new GroupContract(gd);
+        // creation of the first group definition
+        const originalVar = {
+            orgPubKeys: [user1._public.toHex(), user2._public.toHex()],
+            suite: "edwards25519",
+            voteThreshold: ">1/2",
+            purpose: "Test",
+        };
+        const contractCollection = new GroupContractCollection(originalVar.purpose);
+        let gd = new GroupDefinition(originalVar);
+        const contract0 = contractCollection.createGroupContract(undefined, gd);
 
-    //     // user1 exchanges the first group definition
-    //     contract1.sign(user1._private);
-    //     contract1.sign(user1._private);
+        // user1 exchanges the first group definition
+        const variables = gd.allVariables;
+        variables.predecessor.push(contract0.id);
+        gd = new GroupDefinition(variables);
+        let contract1 = contractCollection.createGroupContract(contract0, gd);
+        contractCollection.sign(contract1, user1._private);
+        contractCollection.sign(contract1, user1._private);
 
-    //     // user2 receives the group definition by JSON
-    //     const jsonGD: IGroupContract = contract1.toJSON();
-    //     const user2OriginalGD = GroupContract.createFromJSON(jsonGD);
+        // user2 receives the group definition by JSON
+        const jsonGD: IGroupContract = contract1.toJSON();
+        contract1 = GroupContract.createFromJSON(jsonGD);
 
-    //     // user2 accepts the group definition
-    //     user2OriginalGD.sign(user2._private);
+        expect(contractCollection.isAccepted(contract1)).toBeFalsy();
+        Log.print("Test multiple signature by same user passed!");
+    });
+    it("Test getWorldView with multiple branches", () => {
+        const user1 = new KeyPair();
+        const user2 = new KeyPair();
 
-    //     expect(user2OriginalGD.verify()).toBeFalsy();
-    //     Log.print("Test multiple signature by same user passed!");
-    // });
-    // it("Test getWorldView with multiple branches", () => {
-    //     const user1 = new KeyPair();
-    //     const user2 = new KeyPair();
+        // creation of the first group contract
+        let variables: IGroupDefinition = {
+            orgPubKeys: [user1._public.toHex(), user2._public.toHex()],
+            suite: "edwards25519",
+            voteThreshold: ">1/2",
+            purpose: "Test",
+        };
 
-    //     // creation of the first group definition
-    //     let variables: IGroupDefinition = {
-    //         orgPubKeys: [user1._public.toHex(), user2._public.toHex()],
-    //         suite: "edwards25519",
-    //         voteThreshold: ">1/2",
-    //         purpose: "Test",
-    //     };
+        // creates four group definitions
+        //          gc0
+        //          / \
+        //        gc1  gc3
+        //        /
+        //      gc2
+        const contractCollection = new GroupContractCollection(variables.purpose);
+        let gd = new GroupDefinition(variables);
+        const gc0 = contractCollection.createGroupContract(undefined, gd);
 
-    //     // creates four group definitions
-    //     //          gc0
-    //     //          / \
-    //     //        gc1  gc3
-    //     //        /
-    //     //      gc2
-    //     const gcCollection = new GroupContractCollection(variables.purpose);
-    //     let gd = new GroupDefinition(variables);
-    //     const gc0 = new GroupContract(gd);
+        variables = gd.allVariables;
+        variables.voteThreshold = ">=2/5";
+        gd = new GroupDefinition(variables);
+        const gc1 = contractCollection.createGroupContract(gc0, gd);
 
-    //     variables = gc0.groupDefinition;
-    //     variables.voteThreshold = ">=2/5";
-    //     gd = new GroupDefinition(variables);
-    //     const gc1 = gc0.proposeGroupContract(gd);
+        sleep(1000);
 
-    //     sleep(1000);
+        variables = gd.allVariables;
+        variables.voteThreshold = ">=1/3";
+        gd = new GroupDefinition(variables);
+        const gc2 = contractCollection.createGroupContract(gc1, gd);
 
-    //     variables = gc1.groupDefinition;
-    //     variables.voteThreshold = ">=1/3";
-    //     gd = new GroupDefinition(variables);
-    //     const gd2 = gc1.proposeGroupContract(gd);
+        sleep(1000);
 
-    //     sleep(1000);
+        variables = gd.allVariables;
+        variables.voteThreshold = ">9/10";
+        gd = new GroupDefinition(variables);
+        const gc3 = contractCollection.createGroupContract(gc0, gd);
 
-    //     variables = gc0.groupDefinition;
-    //     variables.voteThreshold = ">9/10";
-    //     gd = new GroupDefinition(variables);
-    //     const gd3 = gc0.proposeGroupContract(gd);
+        sleep(1000);
 
-    //     sleep(1000);
+        expect(contractCollection.getWorldView(gc0)).toEqual([[gc0, gc1, gc2], [gc0, gc3]]);
+        expect(contractCollection.getCurrentGroupContract(user1._public)).toEqual(undefined);
+        Log.print("Test getWorldView with multiples branches passed!");
+    });
+    it("Test vote threshold", () => {
+        const user1 = new KeyPair();
+        const user2 = new KeyPair();
 
-    //     gcCollection.append(gc0);
-    //     gcCollection.append(gc1);
-    //     gcCollection.append(gd2);
-    //     gcCollection.append(gd3);
+        for (let i = 1; i <= 3; i++) {
+            // creation of the GroupContractCollection
+            const purpose: string = "Test";
+            const contractCollection = new GroupContractCollection(purpose);
 
-    //     expect(gcCollection.getWorldView(gc0)).toEqual([[gc0, gc1, gd2], [gc0, gd3]]);
-    //     Log.print("Test getWorldView with multiples branches passed!");
-    //     expect(gcCollection.getCurrentGroupContract(user1._public)).toEqual(undefined);
-    // });
+            // creation of the first group definition
+            const orginialVar = {
+                orgPubKeys: [user1._public.toHex(), user2._public.toHex()],
+                suite: "edwards25519",
+                voteThreshold: ">1/" + i,
+                purpose,
+            };
+
+            let gd = new GroupDefinition(orginialVar);
+            const contract0 = contractCollection.createGroupContract(undefined, gd);
+
+            // user1 exchanges the first group definition
+            const variables = gd.allVariables;
+            variables.predecessor.push(contract0.id);
+            gd = new GroupDefinition(variables);
+            const contract1 = contract0.proposeGroupContract(gd);
+            contractCollection.sign(contract1, user1._private);
+
+            // update group definition Collection
+            contractCollection.append(contract1);
+
+            if (i <= 2) {
+                expect(contractCollection.isAccepted(contract1)).toBeFalsy();
+            } else {
+                expect(contractCollection.isAccepted(contract1)).toBeTruthy();
+            }
+        }
+        Log.print("Test vote threshold passed!");
+    });
+    it("Test merge", () => {
+        const user1 = new KeyPair();
+        const user2 = new KeyPair();
+        const user3 = new KeyPair();
+        const user4 = new KeyPair();
+        const user5 = new KeyPair();
+
+        // creation of the first group contract
+        let variables: IGroupDefinition = {
+            orgPubKeys: [user1._public.toHex(), user2._public.toHex()],
+            suite: "edwards25519",
+            voteThreshold: ">=1/2",
+            purpose: "Test",
+        };
+
+        // creates four group definitions
+        //          c0  c1 c2
+        //           \  |  /
+        //              c3
+
+        const contractCollection = new GroupContractCollection(variables.purpose);
+        let gd = new GroupDefinition(variables);
+        const c0 = contractCollection.createGroupContract(undefined, gd);
+        contractCollection.sign(c0, user1._private);
+        contractCollection.sign(c0, user2._private);
+
+        variables = gd.allVariables;
+        variables.voteThreshold = ">=1/1";
+        variables.orgPubKeys = [user3._public.toHex()];
+        gd = new GroupDefinition(variables);
+        const c1 = contractCollection.createGroupContract(undefined, gd);
+        contractCollection.sign(c1, user3._private);
+
+        variables = gd.allVariables;
+        variables.voteThreshold = ">9/10";
+        variables.orgPubKeys = [user4._public.toHex(), user5._public.toHex()];
+        gd = new GroupDefinition(variables);
+        const c2 = contractCollection.createGroupContract(c1, gd);
+        contractCollection.sign(c2, user4._private);
+        contractCollection.sign(c2, user5._private);
+
+        variables = gd.allVariables;
+        // tslint:disable-next-line: max-line-length
+        variables.orgPubKeys.push(user2._public.toHex(), user3._public.toHex(), user4._public.toHex(), user5._public.toHex());
+        variables.predecessor.push(c2.id); // c1.id is already there
+        variables.voteThreshold = ">9/100";
+        gd = new GroupDefinition(variables);
+        const c3 = contractCollection.createGroupContract(c0, gd);
+        contractCollection.sign(c3, user1._private);
+        contractCollection.sign(c3, user3._private);
+        contractCollection.sign(c3, user4._private);
+        contractCollection.sign(c3, user5._private);
+
+        expect(contractCollection.isAccepted(c3)).toBeTruthy();
+        Log.print("Test merge passed!");
+    });
 });
 
 // // helping method
