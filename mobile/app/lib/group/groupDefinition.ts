@@ -116,6 +116,11 @@ export class GroupDefinition {
         return false;
     }
 
+    verifySignoffWithPublicKey(signoff: string, publicKey: string, message: Buffer): boolean {
+        const point: Point = Public.fromHex(publicKey).point;
+        return schnorr.verify(this.suiteGroup, point, message, Buffer.from(signoff, ENCODING));
+    }
+
     toJSON(): IGroupDefinition {
         // TODO find a solution for field "suite"
         return {
@@ -179,10 +184,5 @@ export class GroupDefinition {
         const parentId = parent.getId();
         const parentIdx = this.predecessor.indexOf(parentId);
         return parentIdx > -1;
-    }
-
-    private verifySignoffWithPublicKey(signoff: string, publicKey: string, message: Buffer): boolean {
-        const point: Point = Public.fromHex(publicKey).point;
-        return schnorr.verify(this.suiteGroup, point, message, Buffer.from(signoff, ENCODING));
     }
 }

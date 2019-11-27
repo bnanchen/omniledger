@@ -76,18 +76,19 @@ export default class GroupContractCollection {
         return this.collection.get(id);
     }
 
-    getCurrentGroupContract(publicKey: Public): GroupContract {
+    getCurrentGroupContract(publicKey: string): GroupContract {
         const eligibleContracts = Array.from(this.collection.values()).filter((c) => c.successor.length === 0);
 
         // check the presence of the publicKey and a corresponding signature
         for (const contract of eligibleContracts) {
-            if (contract.publicKeys.indexOf(publicKey.toHex()) > -1) {
+            if (contract.publicKeys.indexOf(publicKey) > -1) {
                 if (contract.signoffs.length) {
                     const message: Buffer = Buffer.from(contract.id, ENCODING);
                     const suite: Group = contract.suite;
                     for (const sig of contract.signoffs) {
                         // TODO try to move all the crypto to groupDefinition
-                        if (schnorr.verify(suite, publicKey.point, message, Buffer.from(sig, ENCODING))) {
+                        if (contract.groupDefinition.verifySignoffWithPublicKey(sig, publicKey, message)) {
+                        // if (schnorr.verify(suite, publicKey.point, message, Buffer.from(sig, ENCODING))) {
                             return contract;
                         }
                     }
