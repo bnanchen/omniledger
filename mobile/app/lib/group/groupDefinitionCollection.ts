@@ -88,7 +88,7 @@ export default class GroupContractCollection {
                     for (const sig of contract.signoffs) {
                         // TODO try to move all the crypto to groupDefinition
                         if (contract.groupDefinition.verifySignoffWithPublicKey(sig, publicKey, message)) {
-                        // if (schnorr.verify(suite, publicKey.point, message, Buffer.from(sig, ENCODING))) {
+                            // if (schnorr.verify(suite, publicKey.point, message, Buffer.from(sig, ENCODING))) {
                             return contract;
                         }
                     }
@@ -129,36 +129,35 @@ export default class GroupContractCollection {
 
     // delegation of trust
     isAccepted(groupContract: GroupContract): boolean {
+        if (!groupContract.predecessor.length) {
+            throw new TypeError("The groupContract has to have at least one predecessor");
+        }
+
         // if groupDefinition is not included into the collection, append it
         if (!this.has(groupContract)) {
             this.append(groupContract);
         }
 
-        if (groupContract.predecessor.length) {
-            const parent = this.getParent(groupContract);
-            if (!groupContract.verify(...parent)) {
-                return false;
+        const parent = this.getParent(groupContract);
+        if (!groupContract.verify(...parent)) {
+            return false;
+        }
+
+        const verifiedParent = parent.map((p: GroupContract) => {
+            // we count the number of signoffs for a specific parent because
+            // when there is multiple parent each parent vote threshold need to be reached
+            // by the organizers in the parent (not all the organizers of the current group)
+            let numbSignoffsByParent = 0;
+            for (const s of groupContract.signoffs) {
+                if (groupContract.groupDefinition.verifySignoff(s, p.groupDefinition)) {
+                    numbSignoffsByParent++;
+                }
             }
 
-            const verifiedParent = parent.map((p: GroupContract) => {
-                // we count the number of signoffs for a specific parent because
-                // when there is multiple parent each parent vote threshold need to be reached
-                // by the organizers in the parent (not all the organizers of the current group)
-                let numbSignoffsByParent = 0;
-                for (const s of groupContract.signoffs) {
-                    if (groupContract.groupDefinition.verifySignoff(s, p.groupDefinition)) {
-                        numbSignoffsByParent++;
-                    }
-                }
+            return this.meetVoteThreshold(p.voteThreshold, numbSignoffsByParent / p.publicKeys.length);
+        });
 
-                return this.meetVoteThreshold(p.voteThreshold, numbSignoffsByParent / p.publicKeys.length);
-            });
-
-            return verifiedParent.reduce((bool1, bool2) => bool1 && bool2);
-        } else {
-            // tslint:disable-next-line: max-line-length
-            return this.meetVoteThreshold(groupContract.voteThreshold, groupContract.signoffs.length/groupContract.publicKeys.length);
-        }
+        return verifiedParent.reduce((bool1, bool2) => bool1 && bool2);
     }
 
     private meetVoteThreshold(voteThreshold: string, ratio: number): boolean {
