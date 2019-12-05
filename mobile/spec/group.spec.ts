@@ -1,10 +1,8 @@
-import { curve } from "@dedis/kyber";
 import Log from "../app/lib/cothority/log";
 import { KeyPair } from "../app/lib/dynacred/KeyPair";
-import { GroupContract, IGroupContract, ENCODING } from "../app/lib/group/groupContract";
+import { GroupContract, IGroupContract } from "../app/lib/group/groupContract";
+import GroupContractCollection from "../app/lib/group/groupContractCollection";
 import { GroupDefinition, IGroupDefinition } from "../app/lib/group/groupDefinition";
-import GroupContractCollection from "../app/lib/group/groupDefinitionCollection";
-import { schnorr } from "@dedis/kyber/sign";
 
 describe("Group Management", () => {
     it("Test GroupContractCollection", () => {

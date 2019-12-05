@@ -1,7 +1,5 @@
-import { schnorr } from "@dedis/kyber/sign";
-import { Private } from "../dynacred";
-import { GroupDefinition, IGroupDefinition } from "./groupDefinition";
 import { Group } from "@dedis/kyber";
+import { GroupDefinition, IGroupDefinition } from "./groupDefinition";
 
 export const ENCODING: string = "hex";
 
@@ -24,7 +22,7 @@ export class GroupContract {
 
     private _id: string;
     private _groupDefinition: GroupDefinition;
-    private _signoffs: string[]; // class signoff avec static createSignoff
+    private _signoffs: string[];
     private _successor: string[];
 
     constructor(groupDefinition: GroupDefinition, signoffs = []) {
