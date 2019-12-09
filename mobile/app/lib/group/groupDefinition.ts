@@ -1,7 +1,9 @@
-import { curve, Group, Point, Scalar } from "@dedis/kyber";
+// tslint:disable-next-line
+require("nativescript-nodeify");
+import { curve, Group, Point } from "@dedis/kyber";
 import { schnorr } from "@dedis/kyber/sign";
 import { Private, Public } from "../dynacred/KeyPair";
-import { ENCODING, GroupContract } from "./groupContract";
+import { ENCODING } from "./groupContract";
 
 // variables of a GroupDefinition
 export interface IGroupDefinition {

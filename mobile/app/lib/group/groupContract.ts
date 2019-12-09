@@ -1,3 +1,5 @@
+// tslint:disable-next-line
+require("nativescript-nodeify");
 import { Group } from "@dedis/kyber";
 import { GroupDefinition, IGroupDefinition } from "./groupDefinition";
 

@@ -1,3 +1,5 @@
+// tslint:disable-next-line
+require("nativescript-nodeify");
 import { curve, Point, PointFactory } from "@dedis/kyber";
 import { Buffer } from "buffer";
 import { randomBytes } from "crypto-browserify";
