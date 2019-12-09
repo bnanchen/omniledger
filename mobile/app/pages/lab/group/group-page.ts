@@ -14,7 +14,13 @@ import Log from "~/lib/cothority/log";
 import { scan } from "~/lib/scan";
 import { GroupView } from "~/pages/lab/group/group-view";
 import * as dialogs from "tns-core-modules/ui/dialogs";
+import { GroupContract } from "~/lib/group/groupContract";
+import GroupContractCollection from "~/lib/group/groupContractCollection";
+import { GroupDefinition, IGroupDefinition } from "~/lib/group/groupDefinition";
+import { GestureEventData } from "tns-core-modules/ui/gestures/gestures";
 
+export const gcCollection = new GroupContractCollection("Testing");
+export let groupContractId: string = undefined; // TODO to be erased
 export let elements: GroupView;
 const ZXing = require("nativescript-zxing");
 const QrGenerator = new ZXing();
@@ -27,21 +33,26 @@ export async function navigatingTo(args: EventData) {
     page.bindingContext = elements;
 }
 
+export async function configureGroupContract(args: GestureEventData) {
+    return topmost().navigate({
+        moduleName: "pages/lab/group/configure/configure-page",
+    });
+}
+
 export function createQr() {
-    const json = {
-        contractID: "Hash(orgPubKeyList | voteThresh | predecessor | creationTime)",
-        numbOrganizer: 3,
-        orgPubKeyList: ["PubA", "PubB", "PubC"],
-        voteThresh: 33.3,
-        // tslint:disable-next-line: object-literal-sort-keys
-        orgSignatures: ["SigA(contractID)", "SigB(contractID)", "SigC(contractID)"],
-        successor: null,
-        predecessor: "c0’s contractID",
-        creationTime: "2019-10-19T23:15:30.000Z",
+    const gcCollection = new GroupContractCollection("testing");
+    const variables: IGroupDefinition = {
+        purpose: "testing",
+        voteThreshold: "30%",
+        suite: "edwards25519",
+        orgPubKeys: [],
     };
+    const groupDefinition = new GroupDefinition(variables);
+    const groupContract = gcCollection.createGroupContract(undefined, groupDefinition);
+    groupContractId = groupContract.id;
     const sideLength = screen.mainScreen.widthPixels / 4;
     const qrcode = QrGenerator.createBarcode({
-        encode: JSON.stringify(json),
+        encode: JSON.stringify(groupContract.toJSON()),
         format: ZXing.QR_CODE,
         height: sideLength,
         width: sideLength,
@@ -59,7 +70,7 @@ export async function readQr() {
           return;
       }
     } catch (e) {
-      Log.print("pas cool");
+        Log.print("pas cool");
     }
 }
 
@@ -67,16 +78,20 @@ async function addScan() {
     try {
       const result = await scan("{{ L('group.camera_text') }}");
       // show QrCode content
+      const gcCollection = new GroupContractCollection("testing");
+      const groupContract = GroupContract.createFromJSON(JSON.parse(result.text));
+      gcCollection.append(groupContract);
+      groupContractId = groupContract.id;
       dialogs.alert({
-        title: "Content of the QR Code",
-        message: result.text,
-        okButtonText: "OK",
+          title: "Content of the QR Code",
+          message: JSON.stringify(gcCollection.get(groupContract.id)),
+          okButtonText: "OK",
       }).then(() => {
-         console.log("Dialog closed!");
+          console.log("Dialog closed!");
       });
       // topmost().showModal("pages/modal/modal-key", resultText,
       // () => { Log.print("ok"); }, false, false, false);
     } catch (e) {
-      Log.print(e);
+        Log.print(e);
     }
 }
