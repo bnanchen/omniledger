@@ -1,3 +1,5 @@
+// tslint:disable-next-line
+require("nativescript-nodeify");
 import Log from "../app/lib/cothority/log";
 import { KeyPair } from "../app/lib/dynacred/KeyPair";
 import { GroupContract, IGroupContract } from "../app/lib/group/groupContract";
