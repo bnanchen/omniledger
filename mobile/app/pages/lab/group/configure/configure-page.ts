@@ -6,6 +6,7 @@ import { GroupContract } from "~/lib/group/groupContract";
 import GroupContractCollection from "~/lib/group/groupContractCollection";
 import { GroupDefinition, IGroupDefinition } from "~/lib/group/groupDefinition";
 import { isAdmin, uData } from "~/lib/user-data";
+import * as dialogs from "tns-core-modules/ui/dialogs";
 
 let page: Page;
 let gcCollection: GroupContractCollection;
@@ -16,6 +17,7 @@ const dataForm = fromObject({
     voteThreshold: ">1/2",
     predecessor: "",
 });
+let publicKeyList = [];
 // const dataForm = fromObject({
 //     publicKeys: "bonjour", //currentGroupContract ? currentGroupContract.groupDefinition.publicKeys[0] : [],
 //     purpose: "bonjour", //currentGroupContract ? currentGroupContract.groupDefinition.purpose : "",
@@ -27,6 +29,7 @@ const viewModel = fromObject({
     dataForm,
     isAdmin,
     networkStatus: "",
+    publicKeyList,
 });
 
 // Event handler for Page "navigatingTo" event attached in identity.xml
@@ -35,6 +38,7 @@ export async function navigatingTo(args: EventData) {
     page = args.object as Page;
     page.bindingContext = viewModel;
     dataForm.set("description", uData.contact.alias);
+    publicKeyList = [uData.contact];
     // dataForm.set("publicKeys", "bonjour"); TODO pour update le form
 }
 
@@ -70,4 +74,16 @@ export async function propose() {
             gcCollection,
         },
     });
+}
+
+export async function addPublicKey(args: any) {
+    const result = await dialogs.action({
+        title: "Choose an organizer",
+        cancelButtonText: "Cancel",
+        actions: uData.contacts.map((c) => c.alias),
+    });
+    const publicKey = uData.contacts.find((c) => c.alias === result);
+    if (publicKey != null) {
+        console.log(publicKey);
+    }
 }

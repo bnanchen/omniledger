@@ -1,7 +1,7 @@
 // tslint:disable-next-line
 require("nativescript-nodeify");
 import * as dialogs from "tns-core-modules/ui/dialogs";
-import { Private, Public, KeyPair } from "../dynacred/KeyPair";
+import { Private, KeyPair } from "../dynacred/KeyPair";
 import { msgFailed } from "../messages";
 import { scan } from "../scan";
 import { GroupContract } from "./groupContract";
