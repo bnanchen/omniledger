@@ -1,18 +1,40 @@
 // tslint:disable-next-line
 require("nativescript-nodeify");
-import { Group } from "@dedis/kyber";
-import { Private } from "../dynacred/KeyPair";
-import { ENCODING, GroupContract } from "./groupContract";
+import * as dialogs from "tns-core-modules/ui/dialogs";
+import { Private, Public, KeyPair } from "../dynacred/KeyPair";
+import { msgFailed } from "../messages";
+import { scan } from "../scan";
+import { GroupContract } from "./groupContract";
 import { GroupDefinition } from "./groupDefinition";
 
 export default class GroupContractCollection {
 
-    private collection: Map<string, GroupContract>; // key: contractID, value: GroupDefinition
-    private purpose: string;
+    static fromObject(obj: any) {
+        // TODO
+        const gcCollection = new GroupContractCollection();
+        console.log(obj);
+        if (obj.collection) {
+            Object.keys(obj.collection).forEach((id) => {
+                gcCollection._collection.set(id,
+                    obj.collection[id].map((gc: any) => GroupContract.fromObject(gc)),
+                );
+            });
+        }
+        if (obj.currentGroupContract) {
+            gcCollection.currentGroupContract = obj.currentGroupContract;
+        }
 
-    constructor(purpose: string) {
-        this.collection = new Map();
-        this.purpose = purpose;
+        return gcCollection;
+        // console.log("bonjour");
+    }
+
+    private _collection: Map<string, GroupContract>; // key: contractID, value: GroupDefinition
+    private _purpose: string;
+    private currentGroupContract: GroupContract;
+
+    constructor(purpose?: string) {
+        this._collection = new Map();
+        this._purpose = purpose ? purpose : undefined;
     }
 
     createGroupContract(parent: GroupContract, groupDefinition: GroupDefinition): GroupContract {
@@ -27,6 +49,41 @@ export default class GroupContractCollection {
         return newGroupContract;
     }
 
+    async scanNewGroupContract(kp: KeyPair) {
+        try {
+            const result = await scan("{{ L('group.camera_text') }}");
+            const groupContract = GroupContract.createFromJSON(JSON.parse(result.text));
+
+            // cannot accept a group contract where the user public key is not included
+            if (groupContract.groupDefinition.publicKeys.indexOf(kp._public.toHex()) === -1) {
+                throw new Error("This group contract does not contain your public key.");
+            }
+
+            if (this.get(groupContract.id)) {
+                // already existing group contract
+                this.append(groupContract);
+            } else {
+                // not yet aware of this group contract
+                const options = {
+                    title: "Do you want to accept this new group contract?",
+                    message: groupContract.groupDefinition.toString(),
+                    okButtonText: "Yes",
+                    cancelButtonText: "No",
+                };
+                dialogs.confirm(options).then((choice: boolean) => {
+                if (choice) {
+                        this._purpose = groupContract.groupDefinition.purpose;
+                        this.append(groupContract);
+                        this.sign(groupContract, kp._private);
+                    }
+                });
+            }
+
+        } catch (e) {
+            await msgFailed(e.toString(), "Error");
+        }
+    }
+
     sign(groupContract: GroupContract, privateKey: Private): boolean {
         // create signoff
         const signoff: string = groupContract.groupDefinition.sign(privateKey);
@@ -37,65 +94,97 @@ export default class GroupContractCollection {
             isAppended = groupContract.appendSignoff(signoff, parents[i]);
         }
 
+        // if groupContract is accepted; therefore, it becomes the current group contract
+        if (isAppended && this.isAccepted(groupContract)) {
+            this.currentGroupContract = groupContract;
+        }
+
         return isAppended;
     }
 
     append(groupContract: GroupContract) {
+        console.log("a");
         // only proceed if the the groupContract is sound
         const parents = this.getParent(groupContract);
+        console.log("parents: ", parents);
         if (parents.length) {
             if (!groupContract.verify(...this.getParent(groupContract))) {
-                throw new TypeError("Not verified");
+                console.log("The group contract 1");
+                throw new TypeError("The group contract verification failed.");
             }
         } else {
             if (!groupContract.verify(undefined)) {
-                throw new TypeError("Not verified");
+                console.log("The group contract 2");
+                throw new TypeError("The group contract verification failed.");
             }
         }
-
+        console.log("b");
         // check if the id is not already there
         const existing: GroupContract[] = [];
-        this.collection.forEach((gd: GroupContract) => {
+        this._collection.forEach((gd: GroupContract) => {
             if (gd.id === groupContract.id) {
                 existing.push(gd);
             }
         });
-
+        console.log("c");
         if (existing.length) {
             groupContract.mergeSignoffs(existing[0]);
-            this.collection.set(groupContract.id, groupContract);
+            this._collection.set(groupContract.id, groupContract);
         } else {
-            this.collection.set(groupContract.id, groupContract);
+            // there is a new proposed group contract; therefore, erase the current proposed group contract
+            this.removeProposedGroupContract();
+
+            this._collection.set(groupContract.id, groupContract);
         }
+        console.log("d");
+        // if groupContract is accepted; therefore, it becomes the current group contract
+        const numbPredecessor = groupContract.groupDefinition.predecessor.length;
+        if (numbPredecessor === 0 || (numbPredecessor > 0 && this.isAccepted(groupContract))) {
+            this.currentGroupContract = groupContract;
+        }
+        console.log("e");
     }
 
     has(groupContract: GroupContract): boolean {
-        return this.collection.has(groupContract.id);
+        return this._collection.has(groupContract.id);
     }
 
     get(id: string): GroupContract {
-        return this.collection.get(id);
+        return this._collection.get(id);
     }
 
     getCurrentGroupContract(publicKey: string): GroupContract {
-        const eligibleContracts = Array.from(this.collection.values()).filter((c) => c.successor.length === 0);
+        // TODO this method is wrong!!!!!!!!!!!
+        // const eligibleContracts = Array.from(this.collection.values()).filter((c) => c.successor.length === 0);
 
-        // check the presence of the publicKey and a corresponding signature
-        for (const contract of eligibleContracts) {
-            if (contract.publicKeys.indexOf(publicKey) > -1) {
-                if (contract.signoffs.length) {
-                    const message: Buffer = Buffer.from(contract.id, ENCODING);
-                    const suite: Group = contract.suite;
-                    for (const sig of contract.signoffs) {
-                        // TODO try to move all the crypto to groupDefinition
-                        if (contract.groupDefinition.verifySignoffWithPublicKey(sig, publicKey, message)) {
-                            // if (schnorr.verify(suite, publicKey.point, message, Buffer.from(sig, ENCODING))) {
-                            return contract;
-                        }
-                    }
-                }
+        // // check the presence of the publicKey and a corresponding signature
+        // for (const contract of eligibleContracts) {
+        //     if (contract.publicKeys.indexOf(publicKey) > -1) {
+        //         if (contract.signoffs.length) {
+        //             const message: Buffer = Buffer.from(contract.id, ENCODING);
+        //             const suite: Group = contract.suite;
+        //             for (const sig of contract.signoffs) {
+        //                 // TODO try to move all the crypto to groupDefinition
+        //                 if (contract.groupDefinition.verifySignoffWithPublicKey(sig, publicKey, message)) {
+        //                     // if (schnorr.verify(suite, publicKey.point, message, Buffer.from(sig, ENCODING))) {
+        //                     return contract;
+        //                 }
+        //             }
+        //         }
+        //     }
+        // }
+        // return undefined;
+        return this.currentGroupContract;
+    }
+
+    getProposedGroupContract(): GroupContract {
+        for (const gc of Array.from(this._collection.values())) {
+            // avoid returning the genesis group contract
+            if (gc.groupDefinition.predecessor.length > 0 && !this.isAccepted(gc)) {
+                return gc;
             }
         }
+
         return undefined;
     }
 
@@ -117,7 +206,7 @@ export default class GroupContractCollection {
             return [];
         }
 
-        return groupContract.predecessor.map((id: string) => this.collection.get(id));
+        return groupContract.predecessor.map((id: string) => this._collection.get(id));
     }
 
     getChildren(groupContract: GroupContract): GroupContract[] {
@@ -125,25 +214,27 @@ export default class GroupContractCollection {
             return [];
         }
 
-        return groupContract.successor.map((id: string) => this.collection.get(id));
+        return groupContract.successor.map((id: string) => this._collection.get(id));
     }
 
     // delegation of trust
     isAccepted(groupContract: GroupContract): boolean {
+        console.log("isAccepted0");
         if (!groupContract.predecessor.length) {
             throw new TypeError("The groupContract has to have at least one predecessor");
         }
-
+        console.log("isAccepted1");
         // if groupDefinition is not included into the collection, append it
         if (!this.has(groupContract)) {
             this.append(groupContract);
         }
-
+        console.log("isAccepted2");
         const parent = this.getParent(groupContract);
         if (!groupContract.verify(...parent)) {
             return false;
         }
-
+        console.log("isAccepted3");
+        console.log("parent", parent);
         const verifiedParent = parent.map((p: GroupContract) => {
             // we count the number of signoffs for a specific parent because
             // when there is multiple parent each parent vote threshold need to be reached
@@ -157,8 +248,27 @@ export default class GroupContractCollection {
 
             return this.meetVoteThreshold(p.voteThreshold, numbSignoffsByParent / p.publicKeys.length);
         });
-
+        console.log("isAccepted4");
         return verifiedParent.reduce((bool1, bool2) => bool1 && bool2);
+    }
+
+    toObject(): object {
+        // TODO
+        const obj = {
+            collection: {} as any,
+            purpose: this._purpose,
+            currentGroupContract: this.currentGroupContract.toObject(),
+        };
+        this._collection.forEach((gc: GroupContract, id: string) => obj.collection[id] = gc.toObject());
+        return obj;
+    }
+
+    get purpose(): string {
+        return this._purpose;
+    }
+
+    get collection(): Map<string, GroupContract> {
+        return this._collection;
     }
 
     private meetVoteThreshold(voteThreshold: string, ratio: number): boolean {
@@ -170,28 +280,39 @@ export default class GroupContractCollection {
         }
 
         let idx: number;
-        let biggerOrEqual: boolean;
+        let isBiggerOrEqual: boolean;
         if (voteThreshold.indexOf("=") > -1) {
             idx = voteThreshold.indexOf("=");
-            biggerOrEqual = true;
+            isBiggerOrEqual = true;
         } else {
             idx = voteThreshold.indexOf(">");
-            biggerOrEqual = false;
+            isBiggerOrEqual = false;
         }
 
         const fractionNumbers: number[] = voteThreshold.slice(idx + 1).split("/").map((f) => +f);
         const numericalVoteThreshold = fractionNumbers[0] / fractionNumbers[1];
         if (numericalVoteThreshold > 1.0) {
             throw new TypeError("The voteThreshold ratio needs to be between 0.0 and 1.0");
-        } else if (numericalVoteThreshold === 1.0 && !biggerOrEqual) {
+        } else if (numericalVoteThreshold === 1.0 && !isBiggerOrEqual) {
             // translate >1 to >=1 (because >1 makes no sense)
-            biggerOrEqual = true;
+            isBiggerOrEqual = true;
         }
 
-        if (biggerOrEqual) {
+        if (isBiggerOrEqual) {
             return ratio >= numericalVoteThreshold;
         } else {
             return ratio > numericalVoteThreshold;
+        }
+    }
+
+    private removeProposedGroupContract() {
+        if (this._collection.size !== 0) {
+            for (const gc of Array.from(this._collection.values())) {
+                // avoid to erase the genesis group contract
+                if (gc.groupDefinition.predecessor.length > 0 && !this.isAccepted(gc)) {
+                    this._collection.delete(gc.id);
+                }
+            }
         }
     }
 }

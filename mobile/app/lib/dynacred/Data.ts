@@ -33,6 +33,7 @@ import SpawnerInstance, { SPAWNER_COIN } from "~/lib/cothority/personhood/spawne
 import { coinToPoplet } from "~/lib/messages";
 import { Badge } from "./Badge";
 import { Contact } from "./Contact";
+import GroupContractCollection from "~/lib/group/groupContractCollection";
 import { KeyPair, Private, Public } from "./KeyPair";
 import { PartyItem } from "./PartyItem";
 import { PersonhoodRPC, PollStruct, RoPaSci } from "./personhood-rpc";
@@ -80,6 +81,10 @@ export class Data {
 
     set contacts(cs: Contact[]) {
         this.contact.contacts = cs;
+    }
+
+    get groups(): GroupContractCollection[] {
+        return this._groups;
     }
 
     get uniqueMeetings(): number {
@@ -291,6 +296,7 @@ export class Data {
     keyIdentity: KeyPair;
     lts: LongTermSecret = null;
     contact: Contact;
+    _groups: GroupContractCollection[] = [];
     parties: PartyItem[] = [];
     badges: Badge[] = [];
     ropascis: RoPaSciInstance[] = [];
@@ -343,6 +349,11 @@ export class Data {
         Log.lvl2("Getting polls");
         this.polls = obj.polls ? obj.polls.map((rps: any) => PollStruct.fromObject(rps)) : [];
 
+        Log.lvl2("Getting groups");
+        console.log(GroupContractCollection.fromObject({})); // TODO
+        // console.log("test ");
+        // this._groups = obj.groups ? obj.groups.map((g: any) => GroupContractCollection.fromObject(g)) : [];
+
         if (obj.contact != null) {
             this.contact = Contact.fromObject(obj.contact);
             this.contact.data = this;
@@ -378,6 +389,7 @@ export class Data {
             meetups: this.meetups.map((m) => m.toObject()),
             parties: [] as any,
             personhoodPublished: this.personhoodPublished,
+            groups: this._groups.map((g) => g.toObject()),
             polls: [] as any,
             references: this.references,
             ropascis: [] as any,
@@ -623,6 +635,17 @@ export class Data {
 
     rmContact(nu: Contact) {
         this.contacts = this.contacts.filter((u) => !u.equals(nu));
+    }
+
+    addGroup(g: GroupContractCollection) {
+        this._groups.push(g);
+    }
+
+    rmGroup(g: GroupContractCollection) {
+        const idx = this._groups.indexOf(g);
+        if (idx > -1) {
+            this._groups.splice(idx, 1);
+        }
     }
 
     async updateParties(): Promise<PartyItem[]> {

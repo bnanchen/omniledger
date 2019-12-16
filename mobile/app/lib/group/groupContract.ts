@@ -12,14 +12,18 @@ export interface IGroupContract {
     successor: string[];
 }
 
+// GroupContract est un container qui gère tous les éléments
 export class GroupContract {
-    // TODO GroupContract est un container qui gère tous les éléments
-    static createFromJSON(json: IGroupContract): GroupContract {
-
-        // TODO test the id
-
+    static createFromJSON(json: any): GroupContract {
         const groupDefinition = GroupDefinition.createFromJSON(json.groupDefinition);
         return new GroupContract(groupDefinition, json.signoffs);
+    }
+
+    static fromObject(gc: any) {
+        const groupDefinition = GroupDefinition.fromObject(gc.groupDefinition);
+        const groupContract = new GroupContract(groupDefinition, [...gc.signoff].map((s) => Buffer.from(s).toString()));
+        groupContract.successor = [...gc.successor].map((s) => Buffer.from(s).toString());
+        return groupContract;
     }
 
     private _id: string;
@@ -55,6 +59,10 @@ export class GroupContract {
     }
 
     verify(...parent: GroupContract[]): boolean {
+        if (this._id !== this.groupDefinition.getId()) {
+            throw new TypeError("The group contract id is not valid.");
+        }
+
         const arg = parent[0] ? parent.map((p) => p.groupDefinition) : [undefined];
         return this._groupDefinition.verify(this._signoffs, ...arg);
     }
@@ -77,6 +85,15 @@ export class GroupContract {
         };
     }
 
+    toObject(): object {
+        return {
+            id: this._id,
+            groupDefinition: this._groupDefinition.toObject(),
+            signoff: Buffer.from(this._signoffs),
+            successor: Buffer.from(this._successor),
+        }
+    }
+
     get id(): string {
         return this._id;
     }
@@ -91,6 +108,10 @@ export class GroupContract {
 
     get successor(): string[] {
         return this._successor;
+    }
+
+    set successor(s: string[]) {
+        this._successor = s;
     }
 
     get publicKeys(): string[] {

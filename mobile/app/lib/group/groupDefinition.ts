@@ -4,6 +4,7 @@ import { curve, Group, Point } from "@dedis/kyber";
 import { schnorr } from "@dedis/kyber/sign";
 import { Private, Public } from "../dynacred/KeyPair";
 import { ENCODING } from "./groupContract";
+import { createHash, Hash } from "crypto";
 
 // variables of a GroupDefinition
 export interface IGroupDefinition {
@@ -39,6 +40,17 @@ export class GroupDefinition {
         };
 
         return new GroupDefinition(jsonObject);
+    }
+
+    static fromObject(gd: any): GroupDefinition {
+        const variables: IGroupDefinition = {
+            orgPubKeys: [...gd.orgPubKeys].map((pk) => Buffer.from(pk).toString()),
+            suite: Buffer.from(gd.suite).toString(),
+            voteThreshold: Buffer.from(gd.voteThreshold).toString(),
+            purpose: Buffer.from(gd.purpose).toString(),
+            predecessor: [...gd.predecessor].map((p) => Buffer.from(p).toString()),
+        };
+        return new GroupDefinition(variables);
     }
 
     private static getGroup(suite: string): Group {
@@ -81,7 +93,6 @@ export class GroupDefinition {
                 return self.indexOf(val) === idx;
             })
             : [...this.publicKeys];
-
         const id = this.getId();
         // verify that every signoff correspond to one and only one parent public key
         if (signoffs.length) {
@@ -124,7 +135,6 @@ export class GroupDefinition {
     }
 
     toJSON(): IGroupDefinition {
-        // TODO find a solution for field "suite"
         return {
             orgPubKeys: this.variables.orgPubKeys,
             suite: this.variables.suite,
@@ -134,8 +144,36 @@ export class GroupDefinition {
         };
     }
 
+    toObject(): object {
+        return {
+            orgPubKeys: this.variables.orgPubKeys,
+            suite: this.variables.suite,
+            voteThreshold: this.variables.voteThreshold,
+            purpose: this.variables.purpose,
+            predecessor: this.variables.predecessor,
+        };
+    }
+
+    toString(): string {
+        return  "public keys: " + this.variables.orgPubKeys + "\n"
+                + "suite: " + this.variables.suite + "\n"
+                + "vote threshold: " + this.variables.voteThreshold + "\n"
+                + "purpose: " + this.variables.purpose + "\n"
+                + (this.predecessor.length > 0 ? "predecessor: " + this.variables.predecessor : "");
+    }
+
     getId(): string {
         const toH: Buffer = Buffer.from(JSON.stringify(this.toJSON()));
+        // TODO
+        // createHash("sha256").update() il faut updater avec binaries
+        // const hashContext = createHash("sha256");
+        // this.publicKeys.forEach((pk: string) => hashContext.update(Buffer.from(pk, "hex")));
+        // hashContext.update(Buffer.from(this.suite));
+        // hashContext.update(Buffer.from(this.voteThreshold));
+        // if (this.predecessor) {
+        //     this.predecessor.forEach((p: string) => hashContext.update(Buffer.from(p, "hex")));
+        // }
+        // return hashContext.digest().toString(ENCODING);
         return schnorr.hashSchnorr(this.suiteGroup, toH).marshalBinary().toString(ENCODING);
     }
 
@@ -179,7 +217,7 @@ export class GroupDefinition {
     }
 
     private verifyId(parent: GroupDefinition): boolean {
-        if (parent === undefined && !this.predecessor.length) {
+        if (parent === undefined) {
             return true;
         }
 
