@@ -9,6 +9,7 @@ import * as dialogs from "tns-core-modules/ui/dialogs";
 import { topmost } from "tns-core-modules/ui/frame/frame";
 import { EventData, Page } from "tns-core-modules/ui/page/page";
 import { isAdmin, uData } from "~/lib/byzcoin-def";
+import { getAliasFromPublicKey } from "~/lib/group-ui";
 import { msgFailed } from "~/lib/messages";
 
 let page: Page;
@@ -336,27 +337,6 @@ async function setDataForm(groupContract?: GroupContract) {
             const pubKey = (await (uData.contact.getDevices())).map((d) => d.pubKey.toHex())[0];
             publicKeyList.push(new PublicKeyListItem(uData.contact.alias, pubKey));
         }
-    } catch (e) {
-        msgFailed(e.toString(), "Error");
-    }
-}
-
-/**
- * Find an alias for a specific publicKey
- *
- * @param publicKey
- */
-function getAliasFromPublicKey(publicKey: string, devicesPerContacts: any[][]): string | undefined {
-    try {
-        for (let i = 0; i < devicesPerContacts.length; i++) {
-            for (const device of devicesPerContacts[i]) {
-                if (publicKey === device.pubKey.toHex()) {
-                    return uData.contacts[i].alias;
-                }
-            }
-        }
-
-        return undefined;
     } catch (e) {
         msgFailed(e.toString(), "Error");
     }
