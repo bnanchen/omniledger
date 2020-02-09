@@ -70,7 +70,7 @@ export async function scanNewGroupContract(
             } else {
                 const options = {
                     title: localize("group.not_contain_your_pk"),
-                    message: groupContract.groupDefinition.toString(),
+                    message: await replacePublicKeys(groupContract.groupDefinition.toString()),
                     okButtonText: localize("dialog.yes"),
                     cancelButtonText: localize("dialog.no"),
                 };
@@ -89,9 +89,10 @@ export async function scanNewGroupContract(
             // not yet aware of this group contract
             if (!groupContract.groupDefinition.predecessor.length) {
                 // a user can only accept or not the genesis group contract
+                console.log(await replacePublicKeys(groupContract.groupDefinition.toString()));
                 const options = {
                     title: localize("group.accept_group_contract"),
-                    message: groupContract.groupDefinition.toString(),
+                    message: await replacePublicKeys(groupContract.groupDefinition.toString()),
                     okButtonText: localize("dialog.yes"),
                     cancelButtonText: localize("dialog.no"),
                 };
@@ -178,6 +179,8 @@ export function showQR(groupContract: GroupContract) {
  * Find an alias for a specific publicKey
  *
  * @param publicKey
+ * @param devicesPerContacts
+ * @returns {string | undefined} alias corresponding to the public key, otherwise undefined
  */
 export function getAliasFromPublicKey(publicKey: string, devicesPerContacts: any[][]): string | undefined {
     try {
@@ -196,6 +199,38 @@ export function getAliasFromPublicKey(publicKey: string, devicesPerContacts: any
 }
 
 /**
+ * Replace the hexadecimal public keys of the group definition string representation
+ * by the corresponding aliases, if possible
+ *
+ * @param groupDefinition group definition string representation
+ * @returns {string}
+ */
+async function replacePublicKeys(groupDefinition: string): Promise<string> {
+    const pubKeyLine = groupDefinition.split("\n")[0];
+    const publicKeys = pubKeyLine.substr(pubKeyLine.indexOf(":") + 2).split(",");
+
+    const promises = [];
+    for (const contact of uData.contacts) {
+        promises.push(contact.getDevices());
+    }
+    const devicesPerContacts = await Promise.all(promises);
+    const userContact = await uData.contact.getDevices();
+
+    for (const publicKey of publicKeys) {
+        if (publicKey === userContact[0].pubKey.toHex()) {
+            groupDefinition = groupDefinition.replace(publicKey, uData.contact.alias);
+        } else {
+            const alias = getAliasFromPublicKey(publicKey, devicesPerContacts);
+            if (alias !== undefined) {
+                groupDefinition = groupDefinition.replace(publicKey, alias);
+            }
+        }
+    }
+
+    return groupDefinition;
+}
+
+/**
  * Returns the difference between the proposed and the current group contracts
  * in the form of a string
  *
@@ -205,7 +240,7 @@ export function getAliasFromPublicKey(publicKey: string, devicesPerContacts: any
  */
 async function getMessage(proposed: GroupContract, current: GroupContract): Promise<string> {
     if (current === undefined) {
-        return proposed.groupDefinition.toString();
+        return replacePublicKeys(proposed.groupDefinition.toString());
     }
 
     let message = "";
@@ -237,6 +272,12 @@ async function getMessage(proposed: GroupContract, current: GroupContract): Prom
                 message += "\nRemoved organizer: " + getAliasFromPublicKey(org, devicesPerContacts);
             }
         }
+    }
+    // if message is empty, it means it is c1
+    if (message === "") {
+        message = "Group contract automatically created by the genesis group contract.\n" +
+                    "It is similar to the genesis group contract, expect " +
+                    "it has the genesis group contract as predecessor.";
     }
 
     return message;

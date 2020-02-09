@@ -18,7 +18,7 @@ const publicKeyList = new ObservableArray<PublicKeyListItem>();
 const predecessorList = new ObservableArray<PredecessorListItem>();
 
 const dataForm = fromObject({
-    purpose: "Testing",
+    purpose: "",
     suite: "edwards25519",
     voteThreshold: ">1/2",
 });
@@ -331,7 +331,7 @@ async function setDataForm(groupContract?: GroupContract) {
         } else {
             Log.print("setDataForm there is no group contract");
             dataForm.set("suite", "edwards25519");
-            dataForm.set("purpose", "Testing");
+            dataForm.set("purpose", "");
             dataForm.set("voteThreshold", ">1/2");
             dataForm.set("description", uData.contact.alias);
             const pubKey = (await (uData.contact.getDevices())).map((d) => d.pubKey.toHex())[0];
