@@ -110,7 +110,7 @@ export async function propose() {
                 dialogs.alert(localize("group_configure.alert_not_enough_predecessor"));
                 return;
             }
-            // The new group contract has to different from its predecessor
+            // The new group contract has to be different from its predecessor
             // tslint:disable-next-line: max-line-length
             if (groupDefinition.predecessor.length === 1 && groupDefinition.isSimilarTo(gcCollection.getCurrentGroupContract().groupDefinition)) {
                 dialogs.alert({
@@ -119,6 +119,10 @@ export async function propose() {
                     okButtonText: localize("dialog.ok"),
                 });
                 return;
+            }
+            // modify groupContractCollection purpose if it is modified in groupDefinition
+            if (groupDefinition.purpose !== gcCollection.purpose) {
+                gcCollection.purpose = groupDefinition.purpose;
             }
 
             const parent = gcCollection.get(predecessorList.getItem(0).id);
