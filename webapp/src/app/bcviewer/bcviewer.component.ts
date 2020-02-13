@@ -3,15 +3,15 @@ import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from "@angular/material/dial
 import Long from "long";
 import { sprintf } from "sprintf-js";
 
-import { ByzCoinRPC, Instruction } from "@c4dt/cothority/byzcoin";
-import Instance from "@c4dt/cothority/byzcoin/instance";
-import Proof from "@c4dt/cothority/byzcoin/proof";
-import DataBody from "@c4dt/cothority/byzcoin/proto/data-body";
-import DataHeader from "@c4dt/cothority/byzcoin/proto/data-header";
-import TxResult from "@c4dt/cothority/byzcoin/proto/tx-result";
-import CredentialsInstance, { CredentialStruct } from "@c4dt/cothority/personhood/credentials-instance";
-import { ForwardLink, SkipBlock } from "@c4dt/cothority/skipchain";
-import SkipchainRPC from "@c4dt/cothority/skipchain/skipchain-rpc";
+import { ByzCoinRPC, Instruction } from "@dedis/cothority/byzcoin";
+import Instance from "@dedis/cothority/byzcoin/instance";
+import Proof from "@dedis/cothority/byzcoin/proof";
+import DataBody from "@dedis/cothority/byzcoin/proto/data-body";
+import DataHeader from "@dedis/cothority/byzcoin/proto/data-header";
+import TxResult from "@dedis/cothority/byzcoin/proto/tx-result";
+import CredentialsInstance, { CredentialStruct } from "@dedis/cothority/personhood/credentials-instance";
+import { ForwardLink, SkipBlock } from "@dedis/cothority/skipchain";
+import SkipchainRPC from "@dedis/cothority/skipchain/skipchain-rpc";
 import { UserData } from "../user-data.service";
 
 @Injectable({
@@ -103,7 +103,7 @@ export class BCBlock {
     }
 
     async updateLinks() {
-        this.forwardLinks = this.sb.forwardLinks.map((fl) => new LinkBlock(this.scRPC, fl));
+        this.forwardLinks = this.sb.forwardLinks.map((fl) => new LinkBlock(this.scRPC, fl, this.sb));
         if (this.sb.index > 0) {
             this.backwardLinks = this.sb.backlinks.map((fl) => new LinkBlock(this.scRPC, fl));
         }
@@ -188,13 +188,26 @@ class LinkBlock {
     index: number;
     height: number;
     maxHeight: number;
+    sign: string = "";
     id: Buffer;
 
-    constructor(sbRPC: SkipchainRPC, link: (ForwardLink | Buffer)) {
+    constructor(sbRPC: SkipchainRPC, link: (ForwardLink | Buffer), sbNow?: SkipBlock) {
         if (Buffer.isBuffer(link)) {
             this.id = link as Buffer;
         } else {
-            this.id = (link as ForwardLink).to;
+            const l = (link as ForwardLink);
+            this.id = l.to;
+            if (sbNow !== undefined) {
+                // TODO: extend to more than 32 nodes
+                const maskBuf = Buffer.alloc(4);
+                l.signature.getMask().copy(maskBuf);
+                const mask = Buffer.from(maskBuf.reverse()).readInt32BE(0);
+                const roster = l.newRoster || sbNow.roster;
+                roster.list.forEach((_, i) => {
+                    // tslint:disable-next-line:no-bitwise
+                    this.sign += (mask & (1 << i)) !== 0 ? "x" : "-";
+                });
+            }
         }
         sbRPC.getSkipBlock(this.id).then((sb) => {
             this.index = sb.index;

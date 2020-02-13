@@ -2,14 +2,14 @@ import "cross-fetch/polyfill";
 
 import { Injectable } from "@angular/core";
 
-import { ByzCoinRPC } from "@c4dt/cothority/byzcoin";
-import Log from "@c4dt/cothority/log";
+import { ByzCoinRPC } from "@dedis/cothority/byzcoin";
+import Log from "@dedis/cothority/log";
 
-import { IConnection, RosterWSConnection } from "@c4dt/cothority/network/connection";
-import { SkipBlock, SkipchainRPC } from "@c4dt/cothority/skipchain";
-import { StatusRequest, StatusResponse } from "@c4dt/cothority/status/proto";
-import StatusRPC from "@c4dt/cothority/status/status-rpc";
 import { Config, Data, StorageDB } from "@c4dt/dynacred";
+import { IConnection, RosterWSConnection } from "@dedis/cothority/network/connection";
+import { SkipBlock, SkipchainRPC } from "@dedis/cothority/skipchain";
+import { StatusRequest, StatusResponse } from "@dedis/cothority/status/proto";
+import StatusRPC from "@dedis/cothority/status/status-rpc";
 
 @Injectable({
     providedIn: "root",
@@ -46,7 +46,7 @@ export class UserData extends Data {
         for (let i = 0; i < 3; i++) {
             await this.conn.send(new StatusRequest(), StatusResponse);
             const url = this.conn.getURL();
-            logger(`Fastest node at ${i}/3: ${url}`, 20 + i * 20);
+            logger(`Fastest node at ${i + 1}/3: ${url}`, 20 + i * 20);
         }
         this.conn.setParallel(1);
         logger("Fetching latest block", 70);

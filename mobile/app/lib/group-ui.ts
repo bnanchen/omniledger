@@ -1,6 +1,6 @@
-import Log from "@c4dt/cothority/log";
 import { KeyPair } from "@c4dt/dynacred";
 import { GroupContract, GroupContractCollection } from "@c4dt/dynacred";
+import Log from "@dedis/cothority/log";
 import { localize } from "nativescript-localize";
 import { fromNativeSource } from "tns-core-modules/image-source/image-source";
 import { screen } from "tns-core-modules/platform";
@@ -89,7 +89,6 @@ export async function scanNewGroupContract(
             // not yet aware of this group contract
             if (!groupContract.groupDefinition.predecessor.length) {
                 // a user can only accept or not the genesis group contract
-                console.log(await replacePublicKeys(groupContract.groupDefinition.toString()));
                 const options = {
                     title: localize("group.accept_group_contract"),
                     message: await replacePublicKeys(groupContract.groupDefinition.toString()),

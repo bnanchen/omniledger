@@ -8,29 +8,29 @@ import Long from "long";
 import { sprintf } from "sprintf-js";
 import URL from "url-parse";
 
-import ByzCoinRPC from "@c4dt/cothority/byzcoin/byzcoin-rpc";
-import ClientTransaction, { Argument, Instruction } from "@c4dt/cothority/byzcoin/client-transaction";
-import CoinInstance from "@c4dt/cothority/byzcoin/contracts/coin-instance";
-import DarcInstance from "@c4dt/cothority/byzcoin/contracts/darc-instance";
-import Instance, { InstanceID } from "@c4dt/cothority/byzcoin/instance";
-import { LongTermSecret } from "@c4dt/cothority/calypso/calypso-rpc";
-import { IdentityEd25519, Rule } from "@c4dt/cothority/darc";
-import Darc from "@c4dt/cothority/darc/darc";
-import IdentityDarc from "@c4dt/cothority/darc/identity-darc";
-import Signer from "@c4dt/cothority/darc/signer";
-import ISigner from "@c4dt/cothority/darc/signer";
-import SignerEd25519 from "@c4dt/cothority/darc/signer-ed25519";
-import Log from "@c4dt/cothority/log";
+import ByzCoinRPC from "@dedis/cothority/byzcoin/byzcoin-rpc";
+import ClientTransaction, { Argument, Instruction } from "@dedis/cothority/byzcoin/client-transaction";
+import CoinInstance from "@dedis/cothority/byzcoin/contracts/coin-instance";
+import DarcInstance from "@dedis/cothority/byzcoin/contracts/darc-instance";
+import Instance, { InstanceID } from "@dedis/cothority/byzcoin/instance";
+import { LongTermSecret } from "@dedis/cothority/calypso/calypso-rpc";
+import { IdentityEd25519, Rule } from "@dedis/cothority/darc";
+import Darc from "@dedis/cothority/darc/darc";
+import IdentityDarc from "@dedis/cothority/darc/identity-darc";
+import Signer from "@dedis/cothority/darc/signer";
+import ISigner from "@dedis/cothority/darc/signer";
+import SignerEd25519 from "@dedis/cothority/darc/signer-ed25519";
+import Log from "@dedis/cothority/log";
 import CredentialInstance, {
     Attribute,
     Credential,
     CredentialStruct,
     RecoverySignature,
-} from "@c4dt/cothority/personhood/credentials-instance";
-import { PopPartyInstance } from "@c4dt/cothority/personhood/pop-party-instance";
-import RoPaSciInstance from "@c4dt/cothority/personhood/ro-pa-sci-instance";
-import SpawnerInstance, { ICreateCost, SPAWNER_COIN } from "@c4dt/cothority/personhood/spawner-instance";
-import { curve, Point, Scalar, sign } from "@c4dt/kyber";
+} from "@dedis/cothority/personhood/credentials-instance";
+import { PopPartyInstance } from "@dedis/cothority/personhood/pop-party-instance";
+import RoPaSciInstance from "@dedis/cothority/personhood/ro-pa-sci-instance";
+import SpawnerInstance, { ICreateCost, SPAWNER_COIN } from "@dedis/cothority/personhood/spawner-instance";
+import { curve, Point, Scalar, sign } from "@dedis/kyber";
 
 import { Badge } from "./Badge";
 import { Contact } from "./Contact";
@@ -105,7 +105,10 @@ export class Data {
      * Returns a promise with the loaded Data in it, when available. If the file
      * is not found, it returns an empty data.
      */
-    static async load(bc: ByzCoinRPC, storage: IStorage, name: string = Data.defaultStorage): Promise<Data> {
+    static async load(
+      bc: ByzCoinRPC, storage: IStorage,
+      name: string = Data.defaultStorage, getContacts?: boolean,
+    ): Promise<Data> {
         Log.lvl1("Loading data from", name);
         const values = await storage.getObject(name);
         if (!values || values === {}) {
@@ -113,7 +116,7 @@ export class Data {
         }
         const d = new Data(bc, values);
         if (d.contact && await d.contact.isRegisteredByzCoin(bc)) {
-            await d.connectByzcoin();
+            await d.connectByzcoin(getContacts);
         }
         d.storage = storage;
         return d;
@@ -366,10 +369,10 @@ export class Data {
         this.references = ("references" in obj) ? obj.references : [];
     }
 
-    async connectByzcoin(): Promise<ByzCoinRPC> {
+    async connectByzcoin(getContacts: boolean = true): Promise<ByzCoinRPC> {
         Log.lvl2("Getting contact informations");
         this.contact.data = this;
-        await this.contact.updateOrConnect(this.bc, true);
+        await this.contact.updateOrConnect(this.bc, getContacts);
         this.lts = new LongTermSecret(this.bc, this.contact.ltsID, this.contact.ltsX);
         this.ropascis = this.ropascis.map((rps) => RoPaSciInstance.fromObject(this.bc, rps.toObject()));
         return this.bc;
